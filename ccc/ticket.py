@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from cc.utils import get_cc_home, get_tmux_session_name
+from ccc.utils import get_cccc_home, get_tmux_session_name
 
 
 @dataclass
@@ -67,7 +67,7 @@ class TicketRegistry:
     """Manages the registry of all tickets."""
 
     def __init__(self):
-        self.registry_path = get_cc_home() / "tickets.yaml"
+        self.registry_path = get_cccc_home() / "tickets.yaml"
 
     def load(self) -> List[Ticket]:
         """Load all tickets from the registry."""
@@ -82,7 +82,7 @@ class TicketRegistry:
             return [Ticket.from_dict(t) for t in tickets_data]
 
         except Exception as e:
-            from cc.utils import print_error
+            from ccc.utils import print_error
 
             print_error(f"Error loading tickets: {e}")
             return []
@@ -100,7 +100,7 @@ class TicketRegistry:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
         except Exception as e:
-            from cc.utils import print_error
+            from ccc.utils import print_error
 
             print_error(f"Error saving tickets: {e}")
             raise

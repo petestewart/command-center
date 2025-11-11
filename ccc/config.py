@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from cc.utils import get_cc_home, expand_path
+from ccc.utils import get_cccc_home, expand_path
 
 
 @dataclass
@@ -42,12 +42,12 @@ class Config:
 
 def get_config_path() -> Path:
     """Get the path to the config file."""
-    return get_cc_home() / "config.yaml"
+    return get_cccc_home() / "config.yaml"
 
 
 def load_config() -> Config:
     """
-    Load configuration from ~/.cc-control/config.yaml.
+    Load configuration from ~/.cccc-control/config.yaml.
     Creates default config if it doesn't exist.
     """
     config_path = get_config_path()
@@ -82,14 +82,14 @@ def load_config() -> Config:
         return config
 
     except Exception as e:
-        from cc.utils import print_warning
+        from ccc.utils import print_warning
 
         print_warning(f"Error loading config: {e}. Using defaults.")
         return Config()
 
 
 def save_config(config: Config) -> None:
-    """Save configuration to ~/.cc-control/config.yaml."""
+    """Save configuration to ~/.cccc-control/config.yaml."""
     config_path = get_config_path()
 
     # Ensure parent directory exists
@@ -127,7 +127,7 @@ def init_config() -> Config:
     Initialize configuration with interactive prompts.
     Called when user first sets up Command Center.
     """
-    from cc.utils import console
+    from ccc.utils import console
 
     console.print("\n[bold blue]Command Center Configuration[/bold blue]\n")
 

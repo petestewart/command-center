@@ -3,7 +3,7 @@ Basic tests for ticket functionality
 """
 
 from datetime import datetime, timezone
-from cc.ticket import Ticket, create_ticket
+from ccc.ticket import Ticket, create_ticket
 
 
 def test_create_ticket():
@@ -19,7 +19,7 @@ def test_create_ticket():
     assert ticket.title == "Test Ticket"
     assert ticket.branch == "feature/TEST-001-test-ticket"
     assert ticket.worktree_path == "/tmp/test-001"
-    assert ticket.tmux_session == "cc-TEST-001"
+    assert ticket.tmux_session == "ccc-TEST-001"
     assert ticket.status == "active"
 
 
@@ -47,7 +47,7 @@ def test_ticket_from_dict():
         "title": "Dict Test",
         "branch": "feature/test",
         "worktree_path": "/tmp/test",
-        "tmux_session": "cc-TEST-003",
+        "tmux_session": "ccc-TEST-003",
         "status": "active",
         "created_at": "2025-11-10T12:00:00+00:00",
         "updated_at": "2025-11-10T12:00:00+00:00",

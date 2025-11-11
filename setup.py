@@ -50,7 +50,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "ccc=cc.cli:main",
+            "ccc=ccc.cli:main",
         ],
     },
     include_package_data=True,

@@ -136,7 +136,7 @@ Watch for build output in a known location or parse known build commands
 }
 ```
 
-**Location:** `~/.cc-control/<ticket-id>/build-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/build-status.json`
 
 **How to populate:**
 
@@ -150,7 +150,7 @@ $ npm run build || ccc build failure IN-413
 Option B: Wrapper script that automatically updates
 
 ```bash
-# ~/.cc-control/bin/cc-build
+# ~/.ccc-control/bin/ccc-build
 #!/bin/bash
 TICKET_ID=$1
 shift
@@ -176,7 +176,7 @@ exit $EXIT_CODE
 Usage:
 
 ```bash
-$ ccc-build IN-413 npm run build
+$ cccc-build IN-413 npm run build
 ```
 
 **CLI commands:**
@@ -253,7 +253,7 @@ Or if failing:
 }
 ```
 
-**Location:** `~/.cc-control/<ticket-id>/test-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/test-status.json`
 
 #### 2.2 Test Output Parsing
 
@@ -286,7 +286,7 @@ PYTEST_PATTERN = r'(\d+) passed, (\d+) failed, (\d+) skipped in ([\d.]+)s'
 **Wrapper script:**
 
 ```bash
-# ~/.cc-control/bin/cc-test
+# ~/.ccc-control/bin/ccc-test
 #!/bin/bash
 TICKET_ID=$1
 shift
@@ -381,7 +381,7 @@ $ ccc test show <ticket-id>
 **Add configuration options:**
 
 ```yaml
-# ~/.cc-control/config.yaml
+# ~/.ccc-control/config.yaml
 status_poll_interval: 3
 git_status_cache_seconds: 10
 build_status_cache_seconds: 30
@@ -438,8 +438,8 @@ Press `r` in TUI to force immediate refresh of all status
 ```json
 {
   "scripts": {
-    "build": "cc-build $(cat .cc-ticket) tsc",
-    "test": "cc-test $(cat .cc-ticket) jest",
+    "build": "ccc-build $(cat .ccc-ticket) tsc",
+    "test": "ccc-test $(cat .ccc-ticket) jest",
     "dev": "npm run build && node dist/index.js"
   }
 }
@@ -449,7 +449,7 @@ Press `r` in TUI to force immediate refresh of all status
 
 ```bash
 # In agent terminal
-echo "IN-413" > .cc-ticket
+echo "IN-413" > .ccc-ticket
 npm run build  # Automatically tracked
 npm test       # Automatically tracked
 ```
@@ -459,26 +459,26 @@ npm test       # Automatically tracked
 **Makefile:**
 
 ```makefile
-TICKET := $(shell cat .cc-ticket)
+TICKET := $(shell cat .ccc-ticket)
 
 build:
-	cc-build $(TICKET) python -m build
+	ccc-build $(TICKET) python -m build
 
 test:
-	cc-test $(TICKET) pytest
+	ccc-test $(TICKET) pytest
 
 lint:
-	cc-build $(TICKET) ruff check .
+	ccc-build $(TICKET) ruff check .
 ```
 
 ### For Go Project
 
-**.cc-build.sh:**
+**.ccc-build.sh:**
 
 ```bash
 #!/bin/bash
-TICKET=$(cat .cc-ticket)
-cc-build $TICKET go build ./...
+TICKET=$(cat .ccc-ticket)
+ccc-build $TICKET go build ./...
 ```
 
 ---
@@ -489,7 +489,7 @@ Need to add to documentation:
 
 1. **INTEGRATION_GUIDE.md** - How to integrate with build/test commands
 2. **STATUS_FILES.md** - All status file formats
-3. **WRAPPER_SCRIPTS.md** - Using ccc-build and ccc-test wrappers
+3. **WRAPPER_SCRIPTS.md** - Using cccc-build and cccc-test wrappers
 4. **CONFIGURATION.md** - All config options
 
 ---

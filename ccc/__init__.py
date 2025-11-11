@@ -5,6 +5,6 @@ Command Center - Terminal-based mission control for managing development tickets
 __version__ = "0.1.0"
 __author__ = "Command Center Team"
 
-from cc.ticket import Ticket
+from ccc.ticket import Ticket
 
 __all__ = ["Ticket", "__version__"]

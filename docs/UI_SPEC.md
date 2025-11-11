@@ -320,7 +320,7 @@ Minimal animation to reduce distraction:
 │                                                                              │
 │  ⚠ Could not read status file for IN-413                                    │
 │                                                                              │
-│  Path: ~/.cc-control/IN-413/agent-status.json                               │
+│  Path: ~/.ccc-control/IN-413/agent-status.json                              │
 │  Error: File not found                                                      │
 │                                                                              │
 │  This usually means the agent hasn't started yet or the file was deleted.   │
@@ -333,7 +333,7 @@ Minimal animation to reduce distraction:
 ### Tmux Session Not Found
 
 ```
-  ⚠ Warning: Tmux session 'cc-IN-413' not found
+  ⚠ Warning: Tmux session 'ccc-IN-413' not found
 
   The terminal session for this ticket doesn't exist yet.
   Would you like to create it now?

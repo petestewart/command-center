@@ -1,5 +1,5 @@
 # Command Center Configuration Example
-# Copy this file to ~/.cc-control/config.yaml and customize
+# Copy this file to ~/.ccc-control/config.yaml and customize
 
 # Base path for git worktrees
 # Each ticket will get its own subdirectory under this path

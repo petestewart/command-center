@@ -11,12 +11,12 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from cc import __version__
-from cc.config import load_config, init_config
-from cc.ticket import Ticket, TicketRegistry, create_ticket
-from cc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
-from cc.status import init_status_file, read_agent_status, update_status as update_status_file
-from cc.utils import (
+from ccc import __version__
+from ccc.config import load_config, init_config
+from ccc.ticket import Ticket, TicketRegistry, create_ticket
+from ccc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
+from ccc.status import init_status_file, read_agent_status, update_status as update_status_file
+from ccc.utils import (
     validate_ticket_id,
     get_branch_name,
     format_time_ago,
@@ -117,7 +117,7 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
             repo_path = Path(result.stdout.strip())
         except subprocess.CalledProcessError:
             print_error("Not in a git repository and no base repository configured")
-            print_info("Either run this command from a git repository, or configure base_repo_path in ~/.cc-control/config.yaml")
+            print_info("Either run this command from a git repository, or configure base_repo_path in ~/.cccc-control/config.yaml")
             sys.exit(1)
 
     console.print(f"\n[bold]Creating ticket {ticket_id}[/bold]\n")

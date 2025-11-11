@@ -115,7 +115,7 @@ def commit_changes(ticket: Ticket, message: str, files: List[str]):
 ```python
 def trigger_build(ticket: Ticket):
     """Run build command and stream output"""
-    # Read build command from .cc-control/config.yaml
+    # Read build command from .ccc-control/config.yaml
     build_cmd = get_build_command(ticket)
 
     process = subprocess.Popen(
@@ -166,7 +166,7 @@ class TodoItem:
     estimated_minutes: Optional[int]
 ```
 
-**Storage:** `~/.cc-control/<ticket-id>/todos.yaml`
+**Storage:** `~/.ccc-control/<ticket-id>/todos.yaml`
 
 **Example:**
 
@@ -423,7 +423,7 @@ Test API endpoints without leaving Command Center
 #### 7.1 Request Library
 
 ```yaml
-# ~/.cc-control/<ticket-id>/api-requests.yaml
+# ~/.ccc-control/<ticket-id>/api-requests.yaml
 requests:
   - name: "Valid bulk upload"
     method: POST
@@ -581,7 +581,7 @@ Connect to external tools and services
 #### 9.4 Plugin System
 
 ```python
-# ~/.cc-control/plugins/custom_build.py
+# ~/.ccc-control/plugins/custom_build.py
 from ccc.plugin import Plugin
 
 class CustomBuildPlugin(Plugin):

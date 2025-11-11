@@ -504,7 +504,7 @@ Agents (or developers manually) update this file periodically:
 
 ```bash
 # From agent terminal, agent could run:
-echo '{"status": "working", "current_task": "Adding validation", "last_update": "'$(date -Iseconds)'"}' > ~/.cc-control/IN-413/agent-status.json
+echo '{"status": "working", "current_task": "Adding validation", "last_update": "'$(date -Iseconds)'"}' > ~/.ccc-control/IN-413/agent-status.json
 ```
 
 Or use a helper script we provide:
@@ -526,7 +526,7 @@ class StatusWatcher:
     def __init__(self, ticket_id: str, callback):
         self.ticket_id = ticket_id
         self.callback = callback
-        self.status_file = f"~/.cc-control/{ticket_id}/agent-status.json"
+        self.status_file = f"~/.ccc-control/{ticket_id}/agent-status.json"
 
     def start(self):
         # Simple polling approach for Phase 1

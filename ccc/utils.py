@@ -16,14 +16,14 @@ from rich.text import Text
 console = Console()
 
 
-def get_cc_home() -> Path:
+def get_cccc_home() -> Path:
     """
-    Get the Command Center home directory (~/.cc-control).
+    Get the Command Center home directory (~/.cccc-control).
     Creates it if it doesn't exist.
     """
-    cc_home = Path.home() / ".cc-control"
-    cc_home.mkdir(exist_ok=True)
-    return cc_home
+    ccc_home = Path.home() / ".cccc-control"
+    ccc_home.mkdir(exist_ok=True)
+    return ccc_home
 
 
 def get_ticket_dir(ticket_id: str) -> Path:
@@ -31,7 +31,7 @@ def get_ticket_dir(ticket_id: str) -> Path:
     Get the directory for a specific ticket's metadata.
     Creates it if it doesn't exist.
     """
-    ticket_dir = get_cc_home() / ticket_id
+    ticket_dir = get_cccc_home() / ticket_id
     ticket_dir.mkdir(exist_ok=True)
     return ticket_dir
 
@@ -128,7 +128,7 @@ def confirm(message: str, default: bool = False) -> bool:
     return response in ['y', 'yes']
 
 
-def get_tmux_session_name(ticket_id: str, prefix: str = "cc-") -> str:
+def get_tmux_session_name(ticket_id: str, prefix: str = "ccc-") -> str:
     """Generate tmux session name for a ticket."""
     return f"{prefix}{ticket_id}"
 
