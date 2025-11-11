@@ -3,6 +3,7 @@
 ## Design Philosophy
 
 Command Center follows the design principles of successful terminal UIs like LazyGit, htop, and lazydocker:
+
 - Clear visual hierarchy
 - Consistent keyboard shortcuts
 - Contextual help always visible
@@ -57,6 +58,7 @@ This is the landing view when launching Command Center.
 ```
 
 **Status Symbols:**
+
 - `●` Green dot: Active/in progress
 - `✓` Green check: Complete
 - `⚠` Yellow warning: Needs attention
@@ -105,6 +107,7 @@ Displayed when user presses Enter on a ticket in the list view.
 ### 3. Terminal Navigation
 
 When user presses a navigation key (a, s, t), Command Center:
+
 1. Clears the screen
 2. Shows a brief transition message
 3. Attaches to the tmux session/window
@@ -114,12 +117,12 @@ When user presses a navigation key (a, s, t), Command Center:
 ┃ Attaching to Agent Terminal: IN-413                                          ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-  Connecting to tmux session: cc-IN-413 (window: agent)
-  
+  Connecting to tmux session: ccc-IN-413 (window: agent)
+
   Press [Ctrl-b] then [q] to return to Command Center
-  
-  
-  
+
+
+
   [Switching now...]
 ```
 
@@ -221,12 +224,14 @@ In future phases, a persistent status panel may appear on the right side:
 ## Keyboard Shortcuts Reference
 
 ### Global (Available in all views)
+
 - `?` - Show help overlay
 - `q` - Quit application
 - `Esc` - Go back / Close dialog
 - `Ctrl-c` - Force quit
 
 ### Ticket List View
+
 - `↑` or `k` - Move selection up
 - `↓` or `j` - Move selection down
 - `Enter` - View ticket details
@@ -236,6 +241,7 @@ In future phases, a persistent status panel may appear on the right side:
 - `1`-`9` - Quick select ticket by number
 
 ### Ticket Detail View
+
 - `a` - Jump to agent terminal
 - `s` - Jump to server terminal
 - `t` - Jump to test terminal
@@ -243,6 +249,7 @@ In future phases, a persistent status panel may appear on the right side:
 - `e` - Edit ticket metadata
 
 ### Form/Dialog Views
+
 - `Tab` - Next field
 - `Shift-Tab` - Previous field
 - `Enter` - Submit
@@ -251,6 +258,7 @@ In future phases, a persistent status panel may appear on the right side:
 ## Visual Design Elements
 
 ### Progress Indicators
+
 ```
 In-progress: ⚙ ⟳ ◐ ◓ ◑ ◒ (animated spinner)
 Complete:    ✓ ✔
@@ -260,6 +268,7 @@ Idle:        ○ ◯
 ```
 
 ### Status Colors
+
 ```
 Working:   Green    (active, making progress)
 Complete:  Gray     (done, ready to archive)
@@ -269,6 +278,7 @@ Idle:      Blue     (waiting for instructions)
 ```
 
 ### Layout Grid
+
 - Full screen terminal (80x24 minimum, responsive to larger)
 - 2-column layouts use 70/30 split
 - Consistent 2-space padding inside panels
@@ -276,6 +286,7 @@ Idle:      Blue     (waiting for instructions)
 - Section headers use `─` character with labels
 
 ### Typography
+
 - Monospace font (inherits from terminal)
 - Bold for headers and emphasis
 - Dim/gray for secondary information (timestamps, paths)
@@ -292,6 +303,7 @@ Idle:      Blue     (waiting for instructions)
 ## Animation
 
 Minimal animation to reduce distraction:
+
 - Spinner updates every 500ms for "working" status
 - Status panel refresh fade (subtle)
 - No transitions between views (instant switch)
@@ -300,6 +312,7 @@ Minimal animation to reduce distraction:
 ## Error States
 
 ### Network/File Access Error
+
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Error                                                                        ┃
@@ -318,12 +331,13 @@ Minimal animation to reduce distraction:
 ```
 
 ### Tmux Session Not Found
+
 ```
   ⚠ Warning: Tmux session 'cc-IN-413' not found
-  
+
   The terminal session for this ticket doesn't exist yet.
   Would you like to create it now?
-  
+
   [y] Yes, create session  [n] No, go back
 ```
 

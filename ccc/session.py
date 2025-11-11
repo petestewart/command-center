@@ -9,8 +9,8 @@ from typing import Optional, List, Dict
 
 import libtmux
 
-from cc.ticket import Ticket
-from cc.utils import print_error, print_success, print_warning
+from ccc.ticket import Ticket
+from ccc.utils import print_error, print_success, print_warning
 
 
 class TmuxSessionManager:
@@ -117,11 +117,7 @@ class TmuxSessionManager:
             print_error(f"Failed to kill tmux session: {e}")
             return False
 
-    def attach_to_window(
-        self,
-        session_name: str,
-        window_name: str
-    ) -> bool:
+    def attach_to_window(self, session_name: str, window_name: str) -> bool:
         """
         Attach to a specific window in a tmux session.
         This will replace the current terminal with the tmux session.
@@ -136,10 +132,13 @@ class TmuxSessionManager:
         try:
             if not self.session_exists(session_name):
                 print_error(f"Tmux session '{session_name}' does not exist")
-                from cc.utils import print_info
+                from ccc.utils import print_info
+
                 print_info("The session may have been killed or never created.")
                 print_info("You can recreate it by deleting and recreating the ticket:")
-                print_info(f"  ccc delete {session_name.replace('cc-', '')} --keep-worktree")
+                print_info(
+                    f"  ccc delete {session_name.replace('cc-', '')} --keep-worktree"
+                )
                 print_info(f"  Then recreate the ticket with 'ccc create'")
                 return False
 
@@ -229,10 +228,7 @@ def check_tmux_installed() -> bool:
     """
     try:
         result = subprocess.run(
-            ["tmux", "-V"],
-            capture_output=True,
-            text=True,
-            check=False
+            ["tmux", "-V"], capture_output=True, text=True, check=False
         )
         return result.returncode == 0
     except FileNotFoundError:
@@ -248,10 +244,7 @@ def get_tmux_version() -> Optional[str]:
     """
     try:
         result = subprocess.run(
-            ["tmux", "-V"],
-            capture_output=True,
-            text=True,
-            check=True
+            ["tmux", "-V"], capture_output=True, text=True, check=True
         )
         return result.stdout.strip()
     except (FileNotFoundError, subprocess.CalledProcessError):

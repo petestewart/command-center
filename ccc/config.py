@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from cc.utils import get_cc_home, expand_path
+from ccc.utils import get_cc_home, expand_path
 
 
 @dataclass
@@ -21,7 +21,7 @@ class Config:
     status_poll_interval: int = 3
 
     # Tmux session name prefix
-    tmux_session_prefix: str = "cc-"
+    tmux_session_prefix: str = "ccc-"
 
     # Default git remote name
     default_git_remote: str = "origin"
@@ -59,22 +59,31 @@ def load_config() -> Config:
         return config
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             data = yaml.safe_load(f) or {}
 
         # Create config with values from file, using defaults for missing values
         config = Config(
-            base_worktree_path=data.get('base_worktree_path', Config.base_worktree_path),
-            status_poll_interval=data.get('status_poll_interval', Config.status_poll_interval),
-            tmux_session_prefix=data.get('tmux_session_prefix', Config.tmux_session_prefix),
-            default_git_remote=data.get('default_git_remote', Config.default_git_remote),
-            base_repo_path=data.get('base_repo_path'),
+            base_worktree_path=data.get(
+                "base_worktree_path", Config.base_worktree_path
+            ),
+            status_poll_interval=data.get(
+                "status_poll_interval", Config.status_poll_interval
+            ),
+            tmux_session_prefix=data.get(
+                "tmux_session_prefix", Config.tmux_session_prefix
+            ),
+            default_git_remote=data.get(
+                "default_git_remote", Config.default_git_remote
+            ),
+            base_repo_path=data.get("base_repo_path"),
         )
 
         return config
 
     except Exception as e:
-        from cc.utils import print_warning
+        from ccc.utils import print_warning
+
         print_warning(f"Error loading config: {e}. Using defaults.")
         return Config()
 
@@ -86,7 +95,7 @@ def save_config(config: Config) -> None:
     # Ensure parent directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         yaml.dump(config.to_dict(), f, default_flow_style=False, sort_keys=False)
 
 
@@ -118,15 +127,16 @@ def init_config() -> Config:
     Initialize configuration with interactive prompts.
     Called when user first sets up Command Center.
     """
-    from cc.utils import console
+    from ccc.utils import console
 
     console.print("\n[bold blue]Command Center Configuration[/bold blue]\n")
 
     # Get worktree base path
     default_worktree = Config.base_worktree_path
-    worktree_path = console.input(
-        f"Base path for worktrees [{default_worktree}]: "
-    ).strip() or default_worktree
+    worktree_path = (
+        console.input(f"Base path for worktrees [{default_worktree}]: ").strip()
+        or default_worktree
+    )
 
     # Get status poll interval
     default_interval = Config.status_poll_interval
@@ -137,9 +147,10 @@ def init_config() -> Config:
 
     # Get tmux prefix
     default_prefix = Config.tmux_session_prefix
-    tmux_prefix = console.input(
-        f"Tmux session prefix [{default_prefix}]: "
-    ).strip() or default_prefix
+    tmux_prefix = (
+        console.input(f"Tmux session prefix [{default_prefix}]: ").strip()
+        or default_prefix
+    )
 
     # Create and save config
     config = Config(

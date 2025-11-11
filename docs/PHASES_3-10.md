@@ -7,12 +7,15 @@ This document provides detailed planning for phases 3 through 10 of Command Cent
 ## Phase 3: Developer Actions (2 weeks)
 
 ### Goal
+
 Enable common actions directly from Command Center without dropping to CLI
 
 ### Key Features
 
 #### 3.1 Git Operations
+
 **In-TUI git commands:**
+
 - `c` - Commit with message dialog
 - `p` - Push to remote
 - `P` - Pull from remote
@@ -20,6 +23,7 @@ Enable common actions directly from Command Center without dropping to CLI
 - `g` - Enhanced git status (modal view)
 
 **Git commit dialog:**
+
 ```
 ┌─ Commit Changes: IN-413 ───────────────────────┐
 │ Modified files (3):                            │
@@ -41,12 +45,14 @@ Enable common actions directly from Command Center without dropping to CLI
 ```
 
 #### 3.2 Build Triggering
+
 - `b` key to trigger build from TUI
 - Show build progress in real-time
 - Stream build output to panel
 - Toast notification on completion
 
 **Build output view:**
+
 ```
 ┌─ Building: IN-413 ─────────────────────────────┐
 │ Running: npm run build                         │
@@ -62,17 +68,20 @@ Enable common actions directly from Command Center without dropping to CLI
 ```
 
 #### 3.3 Test Execution
+
 - `t` key to run tests from TUI
 - Show test progress
 - Display results immediately
 - Jump to failed test files
 
 #### 3.4 File Preview
+
 - `f` key to browse changed files
 - Show inline diffs with syntax highlighting
 - Use `delta` or `diff-so-fancy` for rendering
 
 **File diff view:**
+
 ```
 ┌─ File: src/api/bulk-upload.ts ─────────────────┐
 │ Modified 2 hours ago (47 lines changed)        │
@@ -92,6 +101,7 @@ Enable common actions directly from Command Center without dropping to CLI
 ### Technical Implementation
 
 **Git operations:**
+
 ```python
 def commit_changes(ticket: Ticket, message: str, files: List[str]):
     """Execute git commit with selected files"""
@@ -101,12 +111,13 @@ def commit_changes(ticket: Ticket, message: str, files: List[str]):
 ```
 
 **Build triggering:**
+
 ```python
 def trigger_build(ticket: Ticket):
     """Run build command and stream output"""
     # Read build command from .cc-control/config.yaml
     build_cmd = get_build_command(ticket)
-    
+
     process = subprocess.Popen(
         build_cmd,
         cwd=ticket.worktree_path,
@@ -114,25 +125,27 @@ def trigger_build(ticket: Ticket):
         stderr=subprocess.STDOUT,
         text=True
     )
-    
+
     # Stream output to TUI
     for line in process.stdout:
         yield line
 ```
 
 ### Deliverables
+
 ✅ Git commit dialog working  
 ✅ Push/pull operations working  
 ✅ Build triggering and progress display  
 ✅ Test execution from TUI  
 ✅ File diff preview  
-✅ Keyboard shortcuts documented  
+✅ Keyboard shortcuts documented
 
 ---
 
 ## Phase 4: Todo List Management (2 weeks)
 
 ### Goal
+
 Break tickets into trackable subtasks with progress visualization
 
 ### Key Features
@@ -140,6 +153,7 @@ Break tickets into trackable subtasks with progress visualization
 #### 4.1 Todo List Structure
 
 **Todo item format:**
+
 ```python
 @dataclass
 class TodoItem:
@@ -155,6 +169,7 @@ class TodoItem:
 **Storage:** `~/.cc-control/<ticket-id>/todos.yaml`
 
 **Example:**
+
 ```yaml
 todos:
   - id: 1
@@ -162,23 +177,23 @@ todos:
     status: done
     assigned_agent: agent-1
     completed_at: 2025-11-09T10:30:00Z
-    
+
   - id: 2
     description: Implement batch processor
     status: done
     assigned_agent: agent-1
     completed_at: 2025-11-09T12:15:00Z
-    
+
   - id: 3
     description: Add input validation
     status: in_progress
     assigned_agent: agent-1
-    
+
   - id: 4
     description: Write integration tests
     status: not_started
     blocked_by: 3
-    
+
   - id: 5
     description: Update API documentation
     status: not_started
@@ -187,6 +202,7 @@ todos:
 #### 4.2 Todo Management UI
 
 **Todo list view (in ticket detail):**
+
 ```
 ┌─ Todo List: IN-413 ────────────────────────────┐
 │                                                │
@@ -203,6 +219,7 @@ todos:
 ```
 
 **Add task dialog:**
+
 ```
 ┌─ New Todo Item ────────────────────────────────┐
 │                                                │
@@ -222,11 +239,13 @@ todos:
 #### 4.3 Progress Visualization
 
 **In list view:**
+
 ```
 ● IN-413  Public API bulk uploads    [████░░] 60%   Working
 ```
 
 **Progress bar with details:**
+
 ```
 Progress: [████████████░░░░░░░] 60%
 3 done | 1 in progress | 1 not started
@@ -247,40 +266,44 @@ Progress: [████████████░░░░░░░] 60%
 ```
 
 ### Deliverables
+
 ✅ Todo list data structure  
 ✅ Todo CRUD operations  
 ✅ Todo list display in TUI  
 ✅ Progress visualization  
 ✅ Task dependencies  
-✅ Agent task assignment  
+✅ Agent task assignment
 
 ---
 
 ## Phase 5: IDE Integration (2 weeks)
 
 ### Goal
+
 Seamlessly connect to code editors for file viewing and editing
 
 ### Key Features
 
 #### 5.1 Editor Detection
+
 ```python
 def detect_editor() -> str:
     """Auto-detect user's preferred editor"""
     # Check environment variables
     if os.getenv("EDITOR"):
         return os.getenv("EDITOR")
-    
+
     # Check for common editors
     editors = ["cursor", "code", "nvim", "vim", "nano"]
     for editor in editors:
         if shutil.which(editor):
             return editor
-    
+
     return "vi"  # Fallback
 ```
 
 #### 5.2 Cursor/VSCode Integration
+
 ```python
 def open_in_cursor(file_path: str, line: int = None):
     """Open file in Cursor at specific line"""
@@ -291,12 +314,14 @@ def open_in_cursor(file_path: str, line: int = None):
 ```
 
 #### 5.3 Built-in Diff Viewer
+
 - Uses `delta` for beautiful diffs
 - Syntax highlighting
 - Side-by-side or unified view
 - Navigate between hunks
 
 #### 5.4 File Tree Navigation
+
 ```
 ┌─ Changed Files: IN-413 ────────────────────────┐
 │ src/                                           │
@@ -317,22 +342,25 @@ def open_in_cursor(file_path: str, line: int = None):
 ```
 
 ### Deliverables
+
 ✅ Editor auto-detection  
 ✅ Open files in external editor  
 ✅ Built-in diff viewer with syntax highlighting  
 ✅ File tree navigation  
-✅ Jump to specific lines  
+✅ Jump to specific lines
 
 ---
 
 ## Phase 6: Replanning & Communication (2 weeks)
 
 ### Goal
+
 Enable dynamic plan adjustments and bidirectional agent communication
 
 ### Key Features
 
 #### 6.1 Mini-Chat Interface
+
 ```
 ┌─ Chat: IN-413 ─────────────────────────────────┐
 │ You:                                           │
@@ -352,6 +380,7 @@ Enable dynamic plan adjustments and bidirectional agent communication
 ```
 
 #### 6.2 Agent Questions
+
 Agents can post questions that appear in TUI:
 
 ```
@@ -366,29 +395,33 @@ Agents can post questions that appear in TUI:
 ```
 
 #### 6.3 Plan Revision
+
 - Edit todo list inline
 - Add/remove/reorder tasks
 - Ask Claude to suggest revisions
 - View revision history
 
 ### Deliverables
+
 ✅ Mini-chat interface  
 ✅ Claude API integration  
 ✅ Agent question notifications  
 ✅ Reply mechanism  
 ✅ Plan revision UI  
-✅ Revision history  
+✅ Revision history
 
 ---
 
 ## Phase 7: API Testing Tools (2 weeks)
 
 ### Goal
+
 Test API endpoints without leaving Command Center
 
 ### Key Features
 
 #### 7.1 Request Library
+
 ```yaml
 # ~/.cc-control/<ticket-id>/api-requests.yaml
 requests:
@@ -404,7 +437,7 @@ requests:
         ]
       }
     expected_status: 200
-    
+
   - name: "Invalid schema"
     method: POST
     url: http://localhost:3000/api/bulk-upload
@@ -416,6 +449,7 @@ requests:
 ```
 
 #### 7.2 Request Builder
+
 ```
 ┌─ New API Request ──────────────────────────────┐
 │ Name: Valid bulk upload                        │
@@ -439,6 +473,7 @@ requests:
 ```
 
 #### 7.3 Response Viewer
+
 ```
 ┌─ Response: Valid bulk upload ──────────────────┐
 │ Status: 200 OK                     Time: 234ms │
@@ -460,28 +495,32 @@ requests:
 ```
 
 ### Deliverables
+
 ✅ Request library storage  
 ✅ Request builder UI  
 ✅ Execute requests  
 ✅ Response viewer with formatting  
 ✅ Request history  
-✅ Assertions/validation  
+✅ Assertions/validation
 
 ---
 
 ## Phase 8: Team Features (3 weeks)
 
 ### Goal
+
 Enable collaboration and visibility across team members
 
 ### Key Features
 
 #### 8.1 Shared State
+
 - Tickets visible to team members
 - Read-only views for non-assignees
 - Activity feed of changes
 
 #### 8.2 Ticket Assignment
+
 ```yaml
 ticket:
   id: IN-413
@@ -491,140 +530,162 @@ ticket:
 ```
 
 #### 8.3 Notifications
+
 - Slack/Discord webhooks
 - Email notifications
 - In-TUI notifications
 
 #### 8.4 State Synchronization
+
 - Export ticket state to JSON
 - Import on another machine
 - Sync via git repo or shared storage
 
 ### Deliverables
+
 ✅ Multi-user ticket views  
 ✅ Assignment system  
 ✅ Notification integrations  
 ✅ State export/import  
-✅ Activity feed  
+✅ Activity feed
 
 ---
 
 ## Phase 9: Advanced Integrations (2 weeks)
 
 ### Goal
+
 Connect to external tools and services
 
 ### Key Features
 
 #### 9.1 Issue Tracker Sync
+
 - Jira integration
 - Linear integration
 - GitHub Issues integration
 - Two-way sync of ticket metadata
 
 #### 9.2 Chat Integrations
+
 - Slack notifications
 - Discord webhooks
 - Teams integration
 
 #### 9.3 CI/CD Integration
+
 - Trigger GitHub Actions
 - View CircleCI status
 - GitLab pipeline integration
 
 #### 9.4 Plugin System
+
 ```python
 # ~/.cc-control/plugins/custom_build.py
-from cc.plugin import Plugin
+from ccc.plugin import Plugin
 
 class CustomBuildPlugin(Plugin):
     def on_build_start(self, ticket):
         # Custom pre-build logic
         pass
-    
+
     def on_build_complete(self, ticket, success):
         # Custom post-build logic
         pass
 ```
 
 ### Deliverables
+
 ✅ Jira/Linear/GitHub sync  
 ✅ Chat platform integrations  
 ✅ CI/CD status display  
 ✅ Plugin system API  
-✅ Example plugins  
+✅ Example plugins
 
 ---
 
 ## Phase 10: Polish & Optimization (2 weeks)
 
 ### Goal
+
 Production-ready reliability, performance, and user experience
 
 ### Key Features
 
 #### 10.1 Performance Optimization
+
 - Profile and optimize hot paths
 - Reduce memory usage
 - Optimize polling intervals
 - Cache expensive operations
 
 #### 10.2 Error Recovery
+
 - Graceful degradation
 - Automatic retry logic
 - Better error messages
 - Recovery suggestions
 
 #### 10.3 Configuration Management
+
 - Per-project configs
 - Project templates
 - Config validation
 - Migration tools
 
 #### 10.4 Documentation
+
 - Comprehensive user guide
 - Video tutorials
 - API documentation
 - Architecture guide
 
 #### 10.5 Distribution
+
 - PyPI package
 - Homebrew formula
 - apt/yum packages
 - Installer script
 
 ### Deliverables
+
 ✅ Sub-100ms TUI response  
 ✅ Handles 20+ tickets smoothly  
 ✅ Complete error recovery  
 ✅ Full documentation  
 ✅ Easy installation  
-✅ Configuration wizard  
+✅ Configuration wizard
 
 ---
 
 ## Cross-Phase Considerations
 
 ### Backward Compatibility
+
 Each phase must maintain compatibility with previous phases:
+
 - Old ticket formats still work
 - Configs can be incrementally adopted
 - Features degrade gracefully if unsupported
 
 ### Testing Strategy
+
 - Unit tests for core logic
 - Integration tests for workflows
 - Manual testing checklist per phase
 - Beta testing with real users
 
 ### Documentation Updates
+
 Each phase requires:
+
 - Updated README
 - New feature guides
 - Updated keyboard shortcuts
 - Example configurations
 
 ### Performance Budgets
+
 - TUI refresh: <100ms
 - Git status query: <500ms
 - Status file read: <50ms
@@ -635,18 +696,18 @@ Each phase requires:
 
 ## Timeline Summary
 
-| Phase | Weeks | Cumulative | Key Milestone |
-|-------|-------|------------|---------------|
-| 1 | 3 | 3 | Core foundation |
-| 2 | 2 | 5 | Enhanced visibility |
-| 3 | 2 | 7 | Developer actions |
-| 4 | 2 | 9 | Todo management |
-| 5 | 2 | 11 | IDE integration |
-| 6 | 2 | 13 | Replanning |
-| 7 | 2 | 15 | API testing |
-| 8 | 3 | 18 | Team features |
-| 9 | 2 | 20 | Integrations |
-| 10 | 2 | 22 | Production ready |
+| Phase | Weeks | Cumulative | Key Milestone       |
+| ----- | ----- | ---------- | ------------------- |
+| 1     | 3     | 3          | Core foundation     |
+| 2     | 2     | 5          | Enhanced visibility |
+| 3     | 2     | 7          | Developer actions   |
+| 4     | 2     | 9          | Todo management     |
+| 5     | 2     | 11         | IDE integration     |
+| 6     | 2     | 13         | Replanning          |
+| 7     | 2     | 15         | API testing         |
+| 8     | 3     | 18         | Team features       |
+| 9     | 2     | 20         | Integrations        |
+| 10    | 2     | 22         | Production ready    |
 
 **Total: 22 weeks (~5.5 months) to v1.0**
 
@@ -655,24 +716,28 @@ Each phase requires:
 ## Post-v1.0 Roadmap
 
 ### v1.1 - Enhanced Intelligence
+
 - AI-powered insights
 - Predictive completion times
 - Anomaly detection
 - Smart suggestions
 
 ### v1.2 - Cloud Sync
+
 - Cloud state storage
 - Multi-machine sync
 - Team dashboards
 - Mobile companion app
 
 ### v1.3 - Advanced Analytics
+
 - Velocity tracking
 - Bottleneck detection
 - Agent performance metrics
 - Custom reports
 
 ### v2.0 - Distributed Development
+
 - Remote agent support
 - Cloud-based agents
 - Distributed builds

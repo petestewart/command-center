@@ -41,7 +41,7 @@ env/
 Thumbs.db
 
 # Command Center data (user-specific)
-.cc-control/
+.ccc-control/
 
 # Testing
 .pytest_cache/

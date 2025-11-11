@@ -11,8 +11,8 @@ status_poll_interval: 3
 
 # Tmux session name prefix
 # Sessions will be named: {prefix}{ticket-id}
-# Example: cc-IN-413
-tmux_session_prefix: cc-
+# Example: ccc-IN-413
+tmux_session_prefix: ccc-
 
 # Default git remote name
 # Used when pushing/pulling branches

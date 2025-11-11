@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from cc.utils import get_ticket_dir
+from ccc.utils import get_ticket_dir
 
 
 @dataclass
@@ -35,14 +35,14 @@ class AgentStatus:
         """Convert to dictionary for JSON serialization."""
         data = asdict(self)
         if self.last_update:
-            data['last_update'] = self.last_update.isoformat()
+            data["last_update"] = self.last_update.isoformat()
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AgentStatus':
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentStatus":
         """Create from dictionary (loaded from JSON)."""
-        if isinstance(data.get('last_update'), str):
-            data['last_update'] = datetime.fromisoformat(data['last_update'])
+        if isinstance(data.get("last_update"), str):
+            data["last_update"] = datetime.fromisoformat(data["last_update"])
         return cls(**data)
 
 
@@ -67,13 +67,14 @@ def read_agent_status(ticket_id: str) -> Optional[AgentStatus]:
         return None
 
     try:
-        with open(status_file, 'r') as f:
+        with open(status_file, "r") as f:
             data = json.load(f)
 
         return AgentStatus.from_dict(data)
 
     except Exception as e:
-        from cc.utils import print_warning
+        from ccc.utils import print_warning
+
         print_warning(f"Error reading status file for {ticket_id}: {e}")
         return None
 
@@ -97,13 +98,14 @@ def write_agent_status(status: AgentStatus) -> bool:
         # Update timestamp
         status.last_update = datetime.now(timezone.utc)
 
-        with open(status_file, 'w') as f:
+        with open(status_file, "w") as f:
             json.dump(status.to_dict(), f, indent=2)
 
         return True
 
     except Exception as e:
-        from cc.utils import print_error
+        from ccc.utils import print_error
+
         print_error(f"Error writing status file: {e}")
         return False
 
@@ -128,7 +130,7 @@ def update_status(
     status: str,
     task: Optional[str] = None,
     blocked: bool = False,
-    question: Optional[str] = None
+    question: Optional[str] = None,
 ) -> bool:
     """
     Update agent status (helper function for CLI).
@@ -155,9 +157,8 @@ def update_status(
     agent_status.blocked = blocked
 
     if question:
-        agent_status.questions.append({
-            "question": question,
-            "asked_at": datetime.now(timezone.utc).isoformat()
-        })
+        agent_status.questions.append(
+            {"question": question, "asked_at": datetime.now(timezone.utc).isoformat()}
+        )
 
     return write_agent_status(agent_status)

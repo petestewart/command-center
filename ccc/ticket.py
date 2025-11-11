@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from cc.utils import get_cc_home, get_tmux_session_name
+from ccc.utils import get_cc_home, get_tmux_session_name
 
 
 @dataclass
@@ -43,18 +43,18 @@ class Ticket:
         """Convert ticket to dictionary for YAML serialization."""
         data = asdict(self)
         # Convert datetimes to ISO format strings
-        data['created_at'] = self.created_at.isoformat()
-        data['updated_at'] = self.updated_at.isoformat()
+        data["created_at"] = self.created_at.isoformat()
+        data["updated_at"] = self.updated_at.isoformat()
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Ticket':
+    def from_dict(cls, data: Dict[str, Any]) -> "Ticket":
         """Create ticket from dictionary (loaded from YAML)."""
         # Parse datetime strings
-        if isinstance(data.get('created_at'), str):
-            data['created_at'] = datetime.fromisoformat(data['created_at'])
-        if isinstance(data.get('updated_at'), str):
-            data['updated_at'] = datetime.fromisoformat(data['updated_at'])
+        if isinstance(data.get("created_at"), str):
+            data["created_at"] = datetime.fromisoformat(data["created_at"])
+        if isinstance(data.get("updated_at"), str):
+            data["updated_at"] = datetime.fromisoformat(data["updated_at"])
 
         return cls(**data)
 
@@ -75,14 +75,15 @@ class TicketRegistry:
             return []
 
         try:
-            with open(self.registry_path, 'r') as f:
+            with open(self.registry_path, "r") as f:
                 data = yaml.safe_load(f) or {}
 
-            tickets_data = data.get('tickets', [])
+            tickets_data = data.get("tickets", [])
             return [Ticket.from_dict(t) for t in tickets_data]
 
         except Exception as e:
-            from cc.utils import print_error
+            from ccc.utils import print_error
+
             print_error(f"Error loading tickets: {e}")
             return []
 
@@ -93,15 +94,14 @@ class TicketRegistry:
             self.registry_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Convert tickets to dictionaries
-            data = {
-                'tickets': [t.to_dict() for t in tickets]
-            }
+            data = {"tickets": [t.to_dict() for t in tickets]}
 
-            with open(self.registry_path, 'w') as f:
+            with open(self.registry_path, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
         except Exception as e:
-            from cc.utils import print_error
+            from ccc.utils import print_error
+
             print_error(f"Error saving tickets: {e}")
             raise
 
