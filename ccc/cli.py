@@ -82,7 +82,7 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
     registry = TicketRegistry()
     if registry.exists(ticket_id):
         print_error(f"Ticket {ticket_id} already exists")
-        print_info(f"Use 'cccc delete {ticket_id}' to remove it first")
+        print_info(f"Use 'ccc delete {ticket_id}' to remove it first")
         sys.exit(1)
 
     # Determine worktree path
@@ -206,7 +206,7 @@ def list(status: str):
     if not tickets:
         print_info("No tickets found")
         if status != 'all':
-            print_info(f"Try 'cccc list' to see all tickets")
+            print_info(f"Try 'ccc list' to see all tickets")
         return
 
     # Create table
