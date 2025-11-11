@@ -266,13 +266,16 @@ def _parse_jest_output(output: str) -> Dict[str, Any]:
 def _parse_pytest_output(output: str) -> Dict[str, Any]:
     """Parse pytest test output."""
     # Example: "47 passed, 2 failed, 1 skipped in 12.34s"
-    pattern = r"(?:(\d+)\s+passed)?(?:,\s*)?(?:(\d+)\s+failed)?(?:,\s*)?(?:(\d+)\s+skipped)?"
+    # Pattern requires at least one of passed/failed/skipped with their numbers
+    pattern = r"(\d+)\s+passed(?:,\s*(\d+)\s+failed)?(?:,\s*(\d+)\s+skipped)?|(\d+)\s+failed(?:,\s*(\d+)\s+skipped)?|(\d+)\s+skipped"
     match = re.search(pattern, output)
 
     if match:
-        passed = int(match.group(1)) if match.group(1) else 0
-        failed = int(match.group(2)) if match.group(2) else 0
-        skipped = int(match.group(3)) if match.group(3) else 0
+        # Handle different match groups depending on what was found
+        groups = match.groups()
+        passed = int(groups[0]) if groups[0] else (0)
+        failed = int(groups[1]) if groups[1] else (int(groups[3]) if groups[3] else 0)
+        skipped = int(groups[2]) if groups[2] else (int(groups[4]) if groups[4] else (int(groups[5]) if groups[5] else 0))
         total = passed + failed + skipped
 
         return {
@@ -287,9 +290,9 @@ def _parse_pytest_output(output: str) -> Dict[str, Any]:
 
 def _parse_go_output(output: str) -> Dict[str, Any]:
     """Parse Go test output."""
-    # Count PASS and FAIL lines
-    passed = len(re.findall(r"^PASS", output, re.MULTILINE))
-    failed = len(re.findall(r"^FAIL", output, re.MULTILINE))
+    # Count individual test results (--- PASS: and --- FAIL:)
+    passed = len(re.findall(r"^---\s+PASS:", output, re.MULTILINE))
+    failed = len(re.findall(r"^---\s+FAIL:", output, re.MULTILINE))
     total = passed + failed
 
     return {
