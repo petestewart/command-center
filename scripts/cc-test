@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# cc-test - Test wrapper script for Command Center
+#
+# Usage: cc-test <ticket-id> <test-command> [args...]
+#
+# Automatically tracks test status for a ticket by:
+# 1. Recording test start time
+# 2. Running the test command and capturing output
+# 3. Capturing exit code
+# 4. Parsing test output to extract pass/fail counts
+# 5. Updating test status via `ccc test parse`
+# 6. Preserving original exit code
+
+set -o pipefail
+
+# Check arguments
+if [ $# -lt 2 ]; then
+    echo "Usage: cc-test <ticket-id> <test-command> [args...]" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  cc-test IN-413 npm test" >&2
+    echo "  cc-test IN-413 pytest" >&2
+    echo "  cc-test IN-413 go test ./..." >&2
+    exit 1
+fi
+
+TICKET_ID="$1"
+shift
+
+# Record start time
+START=$(date +%s)
+
+# Create temp file for output
+TMPFILE=$(mktemp)
+trap "rm -f $TMPFILE" EXIT
+
+# Run the test command
+# Capture both stdout/stderr and exit code
+set +e
+"$@" 2>&1 | tee "$TMPFILE"
+EXIT_CODE=$?
+set -e
+
+# Record end time and calculate duration
+END=$(date +%s)
+DURATION=$((END - START))
+
+# Determine status
+if [ $EXIT_CODE -eq 0 ]; then
+    STATUS="passing"
+else
+    STATUS="failing"
+fi
+
+# Parse output and update test status
+ccc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS" 2>/dev/null || {
+    echo "Warning: Failed to parse test output for $TICKET_ID" >&2
+    # Fallback: just update with basic status
+    ccc test update "$TICKET_ID" --status "$STATUS" --duration "$DURATION" 2>/dev/null || true
+}
+
+# Exit with original exit code
+exit $EXIT_CODE

@@ -30,6 +30,11 @@ class Config:
     # If not set, will use current git repository
     base_repo_path: Optional[str] = None
 
+    # Phase 2: Cache settings
+    git_status_cache_seconds: int = 10
+    build_status_cache_seconds: int = 30
+    test_status_cache_seconds: int = 30
+
     def get_worktree_path(self, ticket_id: str) -> Path:
         """Get the worktree path for a specific ticket."""
         base = expand_path(self.base_worktree_path)
@@ -77,6 +82,15 @@ def load_config() -> Config:
                 "default_git_remote", Config.default_git_remote
             ),
             base_repo_path=data.get("base_repo_path"),
+            git_status_cache_seconds=data.get(
+                "git_status_cache_seconds", Config.git_status_cache_seconds
+            ),
+            build_status_cache_seconds=data.get(
+                "build_status_cache_seconds", Config.build_status_cache_seconds
+            ),
+            test_status_cache_seconds=data.get(
+                "test_status_cache_seconds", Config.test_status_cache_seconds
+            ),
         )
 
         return config
@@ -122,6 +136,45 @@ def update_config(**kwargs) -> Config:
     return config
 
 
+def install_wrapper_scripts() -> bool:
+    """
+    Install wrapper scripts (cc-build, cc-test) to ~/.ccc-control/bin.
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import shutil
+    import os
+
+    try:
+        # Get the bin directory
+        bin_dir = get_cccc_home() / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+
+        # Find the scripts directory (relative to this module)
+        package_dir = Path(__file__).parent.parent
+        scripts_dir = package_dir / "scripts"
+
+        if not scripts_dir.exists():
+            # Scripts not found, might be in development mode
+            return False
+
+        # Install scripts
+        for script_name in ["cc-build", "cc-test"]:
+            src = scripts_dir / script_name
+            dst = bin_dir / script_name
+
+            if src.exists():
+                shutil.copy2(src, dst)
+                # Make executable
+                os.chmod(dst, 0o755)
+
+        return True
+
+    except Exception as e:
+        return False
+
+
 def init_config() -> Config:
     """
     Initialize configuration with interactive prompts.
@@ -162,5 +215,19 @@ def init_config() -> Config:
     save_config(config)
 
     console.print("\n[green]✓[/green] Configuration saved!\n")
+
+    # Install wrapper scripts
+    console.print("Installing wrapper scripts to ~/.ccc-control/bin...")
+    if install_wrapper_scripts():
+        console.print("[green]✓[/green] Wrapper scripts installed!")
+        console.print("\nAdd to your PATH to use wrapper scripts:")
+        console.print("  export PATH=\"$HOME/.ccc-control/bin:$PATH\"")
+        console.print("\nWrapper scripts available:")
+        console.print("  • cc-build <ticket-id> <command>  - Track build status")
+        console.print("  • cc-test <ticket-id> <command>   - Track test status")
+    else:
+        console.print("[yellow]⚠[/yellow] Wrapper scripts not installed (scripts directory not found)")
+
+    console.print()
 
     return config

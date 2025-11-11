@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# cc-build - Build wrapper script for Command Center
+#
+# Usage: cc-build <ticket-id> <build-command> [args...]
+#
+# Automatically tracks build status for a ticket by:
+# 1. Recording build start time
+# 2. Running the build command
+# 3. Capturing exit code
+# 4. Updating build status via `ccc build update`
+# 5. Preserving original exit code
+
+set -o pipefail
+
+# Check arguments
+if [ $# -lt 2 ]; then
+    echo "Usage: cc-build <ticket-id> <build-command> [args...]" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  cc-build IN-413 npm run build" >&2
+    echo "  cc-build IN-413 python -m build" >&2
+    echo "  cc-build IN-413 go build ./..." >&2
+    exit 1
+fi
+
+TICKET_ID="$1"
+shift
+
+# Record start time
+START=$(date +%s)
+
+# Run the build command
+# Capture both stdout/stderr and exit code
+set +e
+"$@"
+EXIT_CODE=$?
+set -e
+
+# Record end time and calculate duration
+END=$(date +%s)
+DURATION=$((END - START))
+
+# Determine status
+if [ $EXIT_CODE -eq 0 ]; then
+    STATUS="passing"
+else
+    STATUS="failing"
+fi
+
+# Update build status
+ccc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION" 2>/dev/null || {
+    echo "Warning: Failed to update build status for $TICKET_ID" >&2
+}
+
+# Exit with original exit code
+exit $EXIT_CODE

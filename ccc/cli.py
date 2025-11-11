@@ -16,6 +16,21 @@ from ccc.config import load_config, init_config
 from ccc.ticket import Ticket, TicketRegistry, create_ticket
 from ccc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
 from ccc.status import init_status_file, read_agent_status, update_status as update_status_file
+from ccc.build_status import (
+    init_build_status,
+    read_build_status,
+    update_build_status,
+    format_build_status,
+)
+from ccc.test_status import (
+    init_test_status,
+    read_test_status,
+    update_test_status,
+    format_test_status,
+    parse_test_output,
+    TestFailure,
+)
+from ccc.git_status import get_git_status, format_git_status
 from ccc.utils import (
     validate_ticket_id,
     get_branch_name,
@@ -160,9 +175,11 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
     if not session_mgr.create_session(ticket):
         print_warning("Failed to create tmux session, but ticket was created")
 
-    # Initialize status file
-    print_info("Initializing status file...")
+    # Initialize status files
+    print_info("Initializing status files...")
     init_status_file(ticket_id)
+    init_build_status(ticket_id)
+    init_test_status(ticket_id)
 
     # Add to registry
     try:
@@ -437,6 +454,212 @@ def status_show(ticket_id: str):
     console.print()
 
 
+@cli.group()
+def build():
+    """Manage build status for tickets."""
+    pass
+
+
+@build.command('update')
+@click.argument('ticket_id')
+@click.option('--status', '-s', required=True,
+              type=click.Choice(['passing', 'failing']),
+              help='Build status')
+@click.option('--duration', '-d', type=int, help='Build duration in seconds')
+@click.option('--warnings', '-w', type=int, default=0, help='Number of warnings')
+@click.option('--errors', '-e', multiple=True, help='Error messages')
+def build_update(ticket_id: str, status: str, duration: Optional[int], warnings: int, errors: tuple):
+    """
+    Update build status for a ticket.
+
+    \b
+    Examples:
+        ccc build update IN-413 --status passing --duration 45
+        ccc build update IN-413 --status failing --duration 23 --errors "Syntax error in main.py"
+    """
+    registry = TicketRegistry()
+
+    # Check if ticket exists
+    if not registry.exists(ticket_id):
+        print_error(f"Ticket {ticket_id} not found")
+        sys.exit(1)
+
+    # Update build status
+    error_list = list(errors) if errors else None
+    if update_build_status(ticket_id, status, duration, error_list, warnings):
+        print_success(f"Updated build status for {ticket_id}")
+        print_info(f"Status: {status}")
+        if duration:
+            print_info(f"Duration: {duration}s")
+    else:
+        print_error("Failed to update build status")
+        sys.exit(1)
+
+
+@build.command('show')
+@click.argument('ticket_id')
+def build_show(ticket_id: str):
+    """
+    Show build status for a ticket.
+
+    \b
+    Examples:
+        ccc build show IN-413
+    """
+    registry = TicketRegistry()
+
+    # Check if ticket exists
+    if not registry.exists(ticket_id):
+        print_error(f"Ticket {ticket_id} not found")
+        sys.exit(1)
+
+    # Read build status
+    build_status_obj = read_build_status(ticket_id)
+
+    if build_status_obj is None:
+        print_warning(f"No build status found for {ticket_id}")
+        print_info("Run a build first or use 'ccc build update' to set status")
+        return
+
+    # Display status
+    console.print(f"\n[bold]Build Status: {ticket_id}[/bold]\n")
+    console.print(format_build_status(build_status_obj))
+    console.print()
+
+
+@cli.group()
+def test():
+    """Manage test status for tickets."""
+    pass
+
+
+@test.command('update')
+@click.argument('ticket_id')
+@click.option('--status', '-s', required=True,
+              type=click.Choice(['passing', 'failing']),
+              help='Test status')
+@click.option('--duration', '-d', type=int, help='Test run duration in seconds')
+@click.option('--total', type=int, help='Total number of tests')
+@click.option('--passed', type=int, help='Number of passed tests')
+@click.option('--failed', type=int, help='Number of failed tests')
+@click.option('--skipped', type=int, help='Number of skipped tests')
+def test_update(ticket_id: str, status: str, duration: Optional[int], total: Optional[int],
+                passed: Optional[int], failed: Optional[int], skipped: Optional[int]):
+    """
+    Update test status for a ticket.
+
+    \b
+    Examples:
+        ccc test update IN-413 --status passing --total 50 --passed 50 --failed 0
+        ccc test update IN-413 --status failing --total 50 --passed 47 --failed 3 --duration 12
+    """
+    registry = TicketRegistry()
+
+    # Check if ticket exists
+    if not registry.exists(ticket_id):
+        print_error(f"Ticket {ticket_id} not found")
+        sys.exit(1)
+
+    # Update test status
+    if update_test_status(ticket_id, status, duration, total, passed, failed, skipped):
+        print_success(f"Updated test status for {ticket_id}")
+        print_info(f"Status: {status}")
+        if total:
+            print_info(f"Tests: {passed}/{total} passed")
+    else:
+        print_error("Failed to update test status")
+        sys.exit(1)
+
+
+@test.command('parse')
+@click.argument('ticket_id')
+@click.argument('output_file', type=click.Path(exists=True))
+@click.option('--framework', '-f', type=click.Choice(['auto', 'jest', 'pytest', 'go']),
+              default='auto', help='Test framework type')
+@click.option('--duration', '-d', type=int, help='Test run duration in seconds')
+@click.option('--status', '-s', type=click.Choice(['passing', 'failing']), help='Override status')
+def test_parse(ticket_id: str, output_file: str, framework: str, duration: Optional[int], status: Optional[str]):
+    """
+    Parse test output file and update status.
+
+    \b
+    Examples:
+        ccc test parse IN-413 test-output.txt
+        ccc test parse IN-413 test-output.txt --framework jest --duration 12
+    """
+    registry = TicketRegistry()
+
+    # Check if ticket exists
+    if not registry.exists(ticket_id):
+        print_error(f"Ticket {ticket_id} not found")
+        sys.exit(1)
+
+    # Read output file
+    try:
+        with open(output_file, 'r') as f:
+            output = f.read()
+    except Exception as e:
+        print_error(f"Failed to read output file: {e}")
+        sys.exit(1)
+
+    # Parse output
+    parsed = parse_test_output(output, framework)
+
+    # Determine status
+    if status is None:
+        status = "passing" if parsed.get('failed', 0) == 0 else "failing"
+
+    # Update test status
+    if update_test_status(
+        ticket_id,
+        status,
+        duration,
+        parsed.get('total'),
+        parsed.get('passed'),
+        parsed.get('failed'),
+        parsed.get('skipped'),
+    ):
+        print_success(f"Updated test status for {ticket_id}")
+        print_info(f"Parsed {parsed.get('total', 0)} tests: "
+                  f"{parsed.get('passed', 0)} passed, "
+                  f"{parsed.get('failed', 0)} failed, "
+                  f"{parsed.get('skipped', 0)} skipped")
+    else:
+        print_error("Failed to update test status")
+        sys.exit(1)
+
+
+@test.command('show')
+@click.argument('ticket_id')
+def test_show(ticket_id: str):
+    """
+    Show test status for a ticket.
+
+    \b
+    Examples:
+        ccc test show IN-413
+    """
+    registry = TicketRegistry()
+
+    # Check if ticket exists
+    if not registry.exists(ticket_id):
+        print_error(f"Ticket {ticket_id} not found")
+        sys.exit(1)
+
+    # Read test status
+    test_status_obj = read_test_status(ticket_id)
+
+    if test_status_obj is None:
+        print_warning(f"No test status found for {ticket_id}")
+        print_info("Run tests first or use 'ccc test update' to set status")
+        return
+
+    # Display status
+    console.print(f"\n[bold]Test Status: {ticket_id}[/bold]\n")
+    console.print(format_test_status(test_status_obj))
+    console.print()
+
+
 @cli.command()
 def config():
     """Initialize or reconfigure Command Center."""
@@ -448,6 +671,30 @@ def version():
     """Show version information."""
     console.print(f"\nCommand Center v{__version__}")
     console.print(f"Tmux: {get_tmux_version()}\n")
+
+
+@cli.command()
+def tui():
+    """
+    Launch the Command Center TUI (Terminal User Interface).
+
+    The TUI provides a LazyGit-style interface for managing tickets
+    and monitoring status in real-time.
+
+    \b
+    Keyboard shortcuts:
+        q     - Quit
+        r     - Refresh all data
+        j/k   - Navigate up/down
+        Enter - Select ticket
+    """
+    from ccc.tui import run_tui
+
+    try:
+        run_tui()
+    except Exception as e:
+        print_error(f"TUI error: {e}")
+        sys.exit(1)
 
 
 def _get_status_color(status: str) -> str:
