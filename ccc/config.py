@@ -35,6 +35,18 @@ class Config:
     build_status_cache_seconds: int = 30
     test_status_cache_seconds: int = 30
 
+    # Phase 3: Build and test commands
+    # Global default commands (used if no project-specific override)
+    default_build_command: str = "npm run build"
+    default_test_command: str = "npm test"
+
+    # Per-project command overrides
+    # Format: {"project-name": {"build_command": "...", "test_command": "..."}}
+    project_commands: Optional[Dict[str, Dict[str, str]]] = None
+
+    # Diff viewer configuration
+    diff_viewer: str = "delta"  # Options: "delta", "diff-so-fancy", "git"
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -44,6 +56,108 @@ class Config:
         base = expand_path(self.base_worktree_path)
         sanitized = sanitize_branch_name(branch_name)
         return base / sanitized
+
+    def get_project_name(self, worktree_path: Path) -> Optional[str]:
+        """
+        Detect project name from worktree path.
+
+        Looks for common project identifiers (package.json, setup.py, Cargo.toml, etc.)
+        and extracts the project name.
+
+        Args:
+            worktree_path: Path to the worktree
+
+        Returns:
+            Project name if detected, None otherwise
+        """
+        import json
+        import re
+
+        worktree_path = Path(worktree_path)
+
+        # Check for package.json (Node.js)
+        package_json = worktree_path / "package.json"
+        if package_json.exists():
+            try:
+                with open(package_json) as f:
+                    data = json.load(f)
+                    return data.get("name")
+            except Exception:
+                pass
+
+        # Check for pyproject.toml (Python) - simple regex parsing
+        pyproject = worktree_path / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                with open(pyproject) as f:
+                    content = f.read()
+                    # Look for [project] name = "..."
+                    match = re.search(r'\[project\].*?name\s*=\s*["\']([^"\']+)["\']', content, re.DOTALL)
+                    if match:
+                        return match.group(1)
+                    # Look for [tool.poetry] name = "..."
+                    match = re.search(r'\[tool\.poetry\].*?name\s*=\s*["\']([^"\']+)["\']', content, re.DOTALL)
+                    if match:
+                        return match.group(1)
+            except Exception:
+                pass
+
+        # Check for Cargo.toml (Rust) - simple regex parsing
+        cargo_toml = worktree_path / "Cargo.toml"
+        if cargo_toml.exists():
+            try:
+                with open(cargo_toml) as f:
+                    content = f.read()
+                    # Look for [package] name = "..."
+                    match = re.search(r'\[package\].*?name\s*=\s*["\']([^"\']+)["\']', content, re.DOTALL)
+                    if match:
+                        return match.group(1)
+            except Exception:
+                pass
+
+        return None
+
+    def get_build_command(self, worktree_path: Path) -> str:
+        """
+        Get the build command for a specific project.
+
+        Checks for project-specific override, falls back to default.
+
+        Args:
+            worktree_path: Path to the worktree
+
+        Returns:
+            Build command to execute
+        """
+        project_name = self.get_project_name(worktree_path)
+
+        if project_name and self.project_commands:
+            project_config = self.project_commands.get(project_name, {})
+            if "build_command" in project_config:
+                return project_config["build_command"]
+
+        return self.default_build_command
+
+    def get_test_command(self, worktree_path: Path) -> str:
+        """
+        Get the test command for a specific project.
+
+        Checks for project-specific override, falls back to default.
+
+        Args:
+            worktree_path: Path to the worktree
+
+        Returns:
+            Test command to execute
+        """
+        project_name = self.get_project_name(worktree_path)
+
+        if project_name and self.project_commands:
+            project_config = self.project_commands.get(project_name, {})
+            if "test_command" in project_config:
+                return project_config["test_command"]
+
+        return self.default_test_command
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -96,6 +210,14 @@ def load_config() -> Config:
             test_status_cache_seconds=data.get(
                 "test_status_cache_seconds", Config.test_status_cache_seconds
             ),
+            default_build_command=data.get(
+                "default_build_command", Config.default_build_command
+            ),
+            default_test_command=data.get(
+                "default_test_command", Config.default_test_command
+            ),
+            project_commands=data.get("project_commands"),
+            diff_viewer=data.get("diff_viewer", Config.diff_viewer),
         )
 
         return config
