@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from ccc.utils import get_cc_home, expand_path
+from cc.utils import get_cc_home, expand_path
 
 
 @dataclass
@@ -82,7 +82,7 @@ def load_config() -> Config:
         return config
 
     except Exception as e:
-        from ccc.utils import print_warning
+        from cc.utils import print_warning
 
         print_warning(f"Error loading config: {e}. Using defaults.")
         return Config()
@@ -127,7 +127,7 @@ def init_config() -> Config:
     Initialize configuration with interactive prompts.
     Called when user first sets up Command Center.
     """
-    from ccc.utils import console
+    from cc.utils import console
 
     console.print("\n[bold blue]Command Center Configuration[/bold blue]\n")
 

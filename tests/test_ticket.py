@@ -3,7 +3,7 @@ Basic tests for ticket functionality
 """
 
 from datetime import datetime, timezone
-from ccc.ticket import Ticket, create_ticket
+from cc.ticket import Ticket, create_ticket
 
 
 def test_create_ticket():

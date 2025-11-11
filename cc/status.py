@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from ccc.utils import get_ticket_dir
+from cc.utils import get_ticket_dir
 
 
 @dataclass
@@ -73,7 +73,7 @@ def read_agent_status(ticket_id: str) -> Optional[AgentStatus]:
         return AgentStatus.from_dict(data)
 
     except Exception as e:
-        from ccc.utils import print_warning
+        from cc.utils import print_warning
 
         print_warning(f"Error reading status file for {ticket_id}: {e}")
         return None
@@ -104,7 +104,7 @@ def write_agent_status(status: AgentStatus) -> bool:
         return True
 
     except Exception as e:
-        from ccc.utils import print_error
+        from cc.utils import print_error
 
         print_error(f"Error writing status file: {e}")
         return False

@@ -11,12 +11,12 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from ccc import __version__
-from ccc.config import load_config, init_config
-from ccc.ticket import Ticket, TicketRegistry, create_ticket
-from ccc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
-from ccc.status import init_status_file, read_agent_status, update_status as update_status_file
-from ccc.utils import (
+from cc import __version__
+from cc.config import load_config, init_config
+from cc.ticket import Ticket, TicketRegistry, create_ticket
+from cc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
+from cc.status import init_status_file, read_agent_status, update_status as update_status_file
+from cc.utils import (
     validate_ticket_id,
     get_branch_name,
     format_time_ago,
