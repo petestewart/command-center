@@ -136,8 +136,8 @@ Watch for build output in a known location or parse known build commands
 
 Option A: Manual update after build
 ```bash
-$ npm run build && cc build success IN-413
-$ npm run build || cc build failure IN-413
+$ npm run build && ccc build success IN-413
+$ npm run build || ccc build failure IN-413
 ```
 
 Option B: Wrapper script that automatically updates
@@ -161,7 +161,7 @@ END=$(date +%s)
 DURATION=$((END - START))
 
 # Update build status
-cc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION"
+`ccc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION"
 exit $EXIT_CODE
 ```
 
@@ -172,8 +172,8 @@ $ cc-build IN-413 npm run build
 
 **CLI commands:**
 ```bash
-$ cc build update <ticket-id> --status <passing|failing> --duration <seconds>
-$ cc build show <ticket-id>
+$ ccc build update <ticket-id> --status <passing|failing> --duration <seconds>
+$ ccc build show <ticket-id>
 ```
 
 **Display in TUI:**
@@ -285,15 +285,15 @@ END=$(date +%s)
 DURATION=$((END - START))
 
 # Parse output and update test status
-cc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS"
+`ccc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS"
 rm "$TMPFILE"
 ```
 
 **CLI commands:**
 ```bash
-$ cc test update <ticket-id> --passed <n> --failed <n> --total <n>
-$ cc test parse <ticket-id> <output-file>
-$ cc test show <ticket-id>
+$ ccc test update <ticket-id> --passed <n> --failed <n> --total <n>
+$ ccc test parse <ticket-id> <output-file>
+$ ccc test show <ticket-id>
 ```
 
 #### 2.3 Test Status Display

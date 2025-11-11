@@ -66,8 +66,8 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
     \b
     Examples:
-        cc create IN-413 "Public API bulk uploads"
-        cc create BUG-42 "Fix login error" --branch hotfix/bug-42
+        ccc create IN-413 "Public API bulk uploads"
+        ccc create BUG-42 "Fix login error" --branch hotfix/bug-42
     """
     # Validate ticket ID format
     if not validate_ticket_id(ticket_id):
@@ -82,7 +82,7 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
     registry = TicketRegistry()
     if registry.exists(ticket_id):
         print_error(f"Ticket {ticket_id} already exists")
-        print_info(f"Use 'cc delete {ticket_id}' to remove it first")
+        print_info(f"Use 'cccc delete {ticket_id}' to remove it first")
         sys.exit(1)
 
     # Determine worktree path
@@ -179,8 +179,8 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
     # Print next steps
     console.print("\n[bold blue]Next steps:[/bold blue]")
-    console.print(f"  • Attach to agent terminal: [cyan]cc attach {ticket_id} agent[/cyan]")
-    console.print(f"  • View all tickets: [cyan]cc list[/cyan]")
+    console.print(f"  • Attach to agent terminal: [cyan]ccc attach {ticket_id} agent[/cyan]")
+    console.print(f"  • View all tickets: [cyan]ccc list[/cyan]")
     console.print(f"  • Open in editor: [cyan]cd {wt_path} && cursor .[/cyan]\n")
 
 
@@ -193,8 +193,8 @@ def list(status: str):
 
     \b
     Examples:
-        cc list
-        cc list --status active
+        ccc list
+        ccc list --status active
     """
     registry = TicketRegistry()
 
@@ -206,7 +206,7 @@ def list(status: str):
     if not tickets:
         print_info("No tickets found")
         if status != 'all':
-            print_info(f"Try 'cc list' to see all tickets")
+            print_info(f"Try 'cccc list' to see all tickets")
         return
 
     # Create table
@@ -266,9 +266,9 @@ def delete(ticket_id: str, keep_worktree: bool, force: bool):
 
     \b
     Examples:
-        cc delete IN-413
-        cc delete IN-413 --keep-worktree
-        cc delete IN-413 --force
+        ccc delete IN-413
+        ccc delete IN-413 --keep-worktree
+        ccc delete IN-413 --force
     """
     registry = TicketRegistry()
 
@@ -332,9 +332,9 @@ def attach(ticket_id: str, window: str):
 
     \b
     Examples:
-        cc attach IN-413 agent
-        cc attach IN-413 server
-        cc attach IN-413 tests
+        ccc attach IN-413 agent
+        ccc attach IN-413 server
+        ccc attach IN-413 tests
     """
     registry = TicketRegistry()
 
@@ -369,9 +369,9 @@ def status_update(ticket_id: str, status: str, task: Optional[str], blocked: boo
 
     \b
     Examples:
-        cc status update IN-413 --status working --task "Adding validation"
-        cc status update IN-413 --status blocked --question "Use Zod or Joi?"
-        cc status update IN-413 --status complete
+        ccc status update IN-413 --status working --task "Adding validation"
+        ccc status update IN-413 --status blocked --question "Use Zod or Joi?"
+        ccc status update IN-413 --status complete
     """
     registry = TicketRegistry()
 
@@ -400,7 +400,7 @@ def status_show(ticket_id: str):
 
     \b
     Examples:
-        cc status show IN-413
+        ccc status show IN-413
     """
     registry = TicketRegistry()
 

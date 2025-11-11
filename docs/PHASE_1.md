@@ -98,7 +98,7 @@ def create_ticket(ticket_id: str, title: str) -> None:
 
 **Example usage:**
 ```bash
-$ cc create IN-413 "Public API bulk uploads"
+$ ccc create IN-413 "Public API bulk uploads"
 ✓ Created ticket IN-413
 ✓ Created worktree at ~/code/worktrees/IN-413
 ✓ Created branch feature/IN-413-bulk-uploads
@@ -108,7 +108,7 @@ $ cc create IN-413 "Public API bulk uploads"
   - tests (window 2)
 
 Next steps:
-  - Attach to agent terminal: cc attach IN-413 agent
+  - Attach to agent terminal: ccc attach IN-413 agent
   - Or open Command Center: cc
 ```
 
@@ -124,7 +124,7 @@ def list_tickets() -> None:
 
 **Example output:**
 ```bash
-$ cc list
+$ ccc list
 ID      TITLE                        STATUS      UPDATED
 IN-413  Public API bulk uploads      Working     2m ago
 IN-407  Refactor auth middleware     Complete    1h ago
@@ -157,7 +157,7 @@ def attach_to_terminal(ticket_id: str, window: str) -> None:
 
 **Example usage:**
 ```bash
-$ cc attach IN-413 agent
+$ ccc attach IN-413 agent
 # Attaches to tmux session cc-IN-413, window 0 (agent)
 ```
 
@@ -473,7 +473,7 @@ echo '{"status": "working", "current_task": "Adding validation", "last_update": 
 
 Or use a helper script we provide:
 ```bash
-cc status update IN-413 --status working --task "Adding validation"
+`ccc status update IN-413 --status working --task "Adding validation"
 ```
 
 #### 3.2 Status Polling
@@ -567,19 +567,19 @@ To make it easy for agents (or developers testing) to update status:
 
 **`cc status update <ticket-id> [options]`**
 ```bash
-$ cc status update IN-413 --status working --task "Adding validation"
+$ ccc status update IN-413 --status working --task "Adding validation"
 ✓ Updated status for IN-413
 
-$ cc status update IN-413 --status blocked --question "Should we use Zod or Joi?"
+$ ccc status update IN-413 --status blocked --question "Should we use Zod or Joi?"
 ✓ Updated status for IN-413 (blocked, awaiting answer)
 
-$ cc status update IN-413 --status complete
+$ ccc status update IN-413 --status complete
 ✓ Updated status for IN-413 (work complete)
 ```
 
 **`cc status show <ticket-id>`**
 ```bash
-$ cc status show IN-413
+$ ccc status show IN-413
 Status: Working
 Task: Adding input validation
 Updated: 2 minutes ago

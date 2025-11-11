@@ -139,8 +139,8 @@ class TmuxSessionManager:
                 from cc.utils import print_info
                 print_info("The session may have been killed or never created.")
                 print_info("You can recreate it by deleting and recreating the ticket:")
-                print_info(f"  cc delete {session_name.replace('cc-', '')} --keep-worktree")
-                print_info(f"  Then recreate the ticket with 'cc create'")
+                print_info(f"  ccc delete {session_name.replace('cc-', '')} --keep-worktree")
+                print_info(f"  Then recreate the ticket with 'ccc create'")
                 return False
 
             # Map window names to indices
