@@ -43,23 +43,23 @@ class StatusPanel(Static):
 class AgentStatusPanel(Static):
     """Panel displaying agent status."""
 
-    ticket_id: reactive[Optional[str]] = reactive(None)
+    branch_name: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.border_title = "Agent Status"
 
-    def watch_ticket_id(self, ticket_id: Optional[str]):
+    def watch_branch_name(self, branch_name: Optional[str]):
         """Update when ticket_id changes."""
         self.update_content()
 
     def update_content(self):
         """Update the panel content."""
-        if not self.ticket_id:
+        if not self.branch_name:
             self.update("No ticket selected")
             return
 
-        agent_status = read_agent_status(self.ticket_id)
+        agent_status = read_agent_status(self.branch_name)
         if not agent_status:
             self.update("⚙ Idle: Waiting for agent to start")
             return
@@ -92,14 +92,14 @@ class AgentStatusPanel(Static):
 class GitStatusPanel(Static):
     """Panel displaying git status."""
 
-    ticket_id: reactive[Optional[str]] = reactive(None)
+    branch_name: reactive[Optional[str]] = reactive(None)
     worktree_path: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.border_title = "Git Status"
 
-    def watch_ticket_id(self, ticket_id: Optional[str]):
+    def watch_branch_name(self, branch_name: Optional[str]):
         """Update when ticket_id changes."""
         self.update_content()
 
@@ -109,7 +109,7 @@ class GitStatusPanel(Static):
 
     def update_content(self):
         """Update the panel content."""
-        if not self.ticket_id or not self.worktree_path:
+        if not self.branch_name or not self.worktree_path:
             self.update("No ticket selected")
             return
 
@@ -141,23 +141,23 @@ class GitStatusPanel(Static):
 class BuildStatusPanel(Static):
     """Panel displaying build status."""
 
-    ticket_id: reactive[Optional[str]] = reactive(None)
+    branch_name: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.border_title = "Build Status"
 
-    def watch_ticket_id(self, ticket_id: Optional[str]):
+    def watch_branch_name(self, branch_name: Optional[str]):
         """Update when ticket_id changes."""
         self.update_content()
 
     def update_content(self):
         """Update the panel content."""
-        if not self.ticket_id:
+        if not self.branch_name:
             self.update("No ticket selected")
             return
 
-        build_status = read_build_status(self.ticket_id)
+        build_status = read_build_status(self.branch_name)
         if not build_status:
             self.update("? Unknown - No builds recorded")
             return
@@ -188,23 +188,23 @@ class BuildStatusPanel(Static):
 class TestStatusPanel(Static):
     """Panel displaying test status."""
 
-    ticket_id: reactive[Optional[str]] = reactive(None)
+    branch_name: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.border_title = "Test Status"
 
-    def watch_ticket_id(self, ticket_id: Optional[str]):
+    def watch_branch_name(self, branch_name: Optional[str]):
         """Update when ticket_id changes."""
         self.update_content()
 
     def update_content(self):
         """Update the panel content."""
-        if not self.ticket_id:
+        if not self.branch_name:
             self.update("No ticket selected")
             return
 
-        test_status = read_test_status(self.ticket_id)
+        test_status = read_test_status(self.branch_name)
         if not test_status:
             self.update("? Unknown - No tests recorded")
             return
@@ -240,7 +240,7 @@ class TestStatusPanel(Static):
 class TicketDetailView(VerticalScroll):
     """Detailed view of a single ticket with all status panels."""
 
-    ticket_id: reactive[Optional[str]] = reactive(None)
+    branch_name: reactive[Optional[str]] = reactive(None)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -255,11 +255,11 @@ class TicketDetailView(VerticalScroll):
             yield BuildStatusPanel(id="build-panel", classes="status-panel")
             yield TestStatusPanel(id="test-panel", classes="status-panel")
 
-    def watch_ticket_id(self, ticket_id: Optional[str]):
-        """Update when ticket_id changes."""
-        if ticket_id:
+    def watch_branch_name(self, branch_name: Optional[str]):
+        """Update when branch_name changes."""
+        if branch_name:
             registry = TicketRegistry()
-            self.ticket = registry.get(ticket_id)
+            self.ticket = registry.get(branch_name)
             self.update_panels()
         else:
             self.ticket = None
@@ -272,25 +272,26 @@ class TicketDetailView(VerticalScroll):
             header.update("No ticket selected")
             return
 
-        # Update header
+        # Update header with branch name and extracted ID if available
         header = self.query_one("#ticket-header", Static)
-        header.update(f"[bold]{self.ticket.id}[/bold] - {self.ticket.title}\n"
-                     f"Branch: {self.ticket.branch}\n"
+        display_id = f"[{self.ticket.display_id}] " if self.ticket.display_id else ""
+        header.update(f"[bold]{display_id}{self.ticket.branch}[/bold]\n"
+                     f"Title: {self.ticket.title}\n"
                      f"Worktree: {self.ticket.worktree_path}")
 
-        # Update all status panels
+        # Update all status panels - use branch (which is the primary ID)
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
-        agent_panel.ticket_id = self.ticket.id
+        agent_panel.branch_name = self.ticket.branch
 
         git_panel = self.query_one("#git-panel", GitStatusPanel)
-        git_panel.ticket_id = self.ticket.id
+        git_panel.branch_name = self.ticket.branch
         git_panel.worktree_path = self.ticket.worktree_path
 
         build_panel = self.query_one("#build-panel", BuildStatusPanel)
-        build_panel.ticket_id = self.ticket.id
+        build_panel.branch_name = self.ticket.branch
 
         test_panel = self.query_one("#test-panel", TestStatusPanel)
-        test_panel.ticket_id = self.ticket.id
+        test_panel.branch_name = self.ticket.branch
 
     def refresh_status(self):
         """Manually refresh all status panels."""
@@ -369,7 +370,7 @@ class CommandCenterTUI(App):
 
         # Setup ticket table
         table = self.query_one("#ticket-table", DataTable)
-        table.add_columns("ID", "Title", "Status", "Updated")
+        table.add_columns("ID", "Branch", "Title", "Status", "Updated")
         table.cursor_type = "row"
         table.zebra_stripes = True
 
@@ -388,24 +389,28 @@ class CommandCenterTUI(App):
         table.clear()
 
         for ticket in self.tickets:
+            # Extract display ID if available
+            display_id = ticket.display_id or "-"
+
             # Get agent status for display
-            agent_status = read_agent_status(ticket.id)
+            agent_status = read_agent_status(ticket.branch)
             if agent_status and agent_status.current_task:
                 status_text = f"{agent_status.status}: {agent_status.current_task[:20]}"
             else:
                 status_text = ticket.status
 
             table.add_row(
-                ticket.id,
-                ticket.title[:30],
+                display_id,
+                ticket.branch[:25],
+                ticket.title[:25],
                 status_text,
                 format_time_ago(ticket.updated_at),
-                key=ticket.id,
+                key=ticket.branch,
             )
 
         # Select first ticket if available
         if self.tickets and not self.selected_ticket_id:
-            self.selected_ticket_id = self.tickets[0].id
+            self.selected_ticket_id = self.tickets[0].branch
             self.update_detail_view()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -416,7 +421,7 @@ class CommandCenterTUI(App):
     def update_detail_view(self):
         """Update the detail view with selected ticket."""
         detail_view = self.query_one("#detail-view", TicketDetailView)
-        detail_view.ticket_id = self.selected_ticket_id
+        detail_view.branch_name = self.selected_ticket_id
 
     def action_refresh(self):
         """Manually refresh all data."""

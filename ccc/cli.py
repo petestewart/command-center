@@ -32,8 +32,8 @@ from ccc.test_status import (
 )
 from ccc.git_status import get_git_status, format_git_status
 from ccc.utils import (
-    validate_ticket_id,
-    get_branch_name,
+    get_tmux_session_name_from_branch,
+    extract_display_id,
     format_time_ago,
     print_success,
     print_error,
@@ -66,54 +66,50 @@ def cli(ctx):
 
 
 @cli.command()
-@click.argument('ticket_id')
-@click.argument('title')
+@click.argument('branch_name')
+@click.argument('title', required=False, default='')
 @click.option('--worktree-path', '-w', help='Custom worktree path (overrides config)')
-@click.option('--branch', '-b', help='Custom branch name (auto-generated if not provided)')
 @click.option('--base-repo', help='Base repository path for creating worktree')
-def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Optional[str], base_repo: Optional[str]):
+def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo: Optional[str]):
     """
-    Create a new ticket with git worktree and tmux session.
+    Create a new ticket with git worktree and tmux session using a branch name.
 
-    TICKET_ID: Unique ticket identifier (e.g., IN-413, PROJ-123)
+    BRANCH_NAME: Git branch name (e.g., "feature/IN-413-add-api", "bugfix/auth-fix")
 
-    TITLE: Human-readable ticket title
+    TITLE: Human-readable ticket title (optional, extracted from branch if not provided)
 
     \b
     Examples:
-        ccc create IN-413 "Public API bulk uploads"
-        ccc create BUG-42 "Fix login error" --branch hotfix/bug-42
+        ccc create feature/IN-413-add-api "Public API bulk uploads"
+        ccc create bugfix/auth-fix "Fix authentication error"
+        ccc create feature/new-dashboard
     """
-    # Validate ticket ID format
-    if not validate_ticket_id(ticket_id):
-        print_error(f"Invalid ticket ID format: {ticket_id}")
-        print_info("Expected format: PREFIX-NUMBER (e.g., IN-413, PROJ-123)")
-        sys.exit(1)
-
     # Load config
     config = load_config()
 
     # Check if ticket already exists
     registry = TicketRegistry()
-    if registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} already exists")
-        print_info(f"Use 'ccc delete {ticket_id}' to remove it first")
+    if registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' already exists in registry")
+        print_info(f"Use 'ccc delete {branch_name}' to remove it first")
         sys.exit(1)
+
+    # If title not provided, try to generate from branch name
+    if not title:
+        # Convert branch name to title (e.g., "feature/add-api" -> "Add api")
+        parts = branch_name.split('/')
+        title = parts[-1].replace('-', ' ').replace('_', ' ').title()
 
     # Determine worktree path
     if worktree_path:
         wt_path = expand_path(worktree_path)
     else:
-        wt_path = config.get_worktree_path(ticket_id)
+        wt_path = config.get_worktree_path(branch_name)
 
     # Check if worktree path already exists
     if wt_path.exists():
         print_error(f"Worktree path already exists: {wt_path}")
         sys.exit(1)
-
-    # Determine branch name
-    if branch is None:
-        branch = get_branch_name(ticket_id, title)
 
     # Determine base repository
     if base_repo:
@@ -135,7 +131,13 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
             print_info("Either run this command from a git repository, or configure base_repo_path in ~/.cccc-control/config.yaml")
             sys.exit(1)
 
-    console.print(f"\n[bold]Creating ticket {ticket_id}[/bold]\n")
+    # Extract display ID if available
+    display_id = extract_display_id(branch_name)
+    console.print(f"\n[bold]Creating work item for branch '{branch_name}'[/bold]")
+    if display_id:
+        console.print(f"[dim]Detected ticket ID: {display_id}[/dim]\n")
+    else:
+        console.print()
 
     # Create git worktree
     try:
@@ -146,14 +148,14 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
         # Create worktree and checkout branch
         subprocess.run(
-            ['git', 'worktree', 'add', '-b', branch, str(wt_path)],
+            ['git', 'worktree', 'add', '-b', branch_name, str(wt_path)],
             cwd=str(repo_path),
             check=True,
             capture_output=True
         )
 
         print_success(f"Created worktree at {wt_path}")
-        print_success(f"Created and checked out branch '{branch}'")
+        print_success(f"Created and checked out branch '{branch_name}'")
 
     except subprocess.CalledProcessError as e:
         print_error(f"Failed to create git worktree: {e}")
@@ -163,9 +165,8 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
     # Create ticket
     ticket = create_ticket(
-        ticket_id=ticket_id,
+        branch=branch_name,
         title=title,
-        branch=branch,
         worktree_path=str(wt_path),
     )
 
@@ -177,14 +178,14 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
     # Initialize status files
     print_info("Initializing status files...")
-    init_status_file(ticket_id)
-    init_build_status(ticket_id)
-    init_test_status(ticket_id)
+    init_status_file(branch_name)
+    init_build_status(branch_name)
+    init_test_status(branch_name)
 
     # Add to registry
     try:
         registry.add(ticket)
-        print_success(f"\nTicket {ticket_id} created successfully!")
+        print_success(f"\nWork item for branch '{branch_name}' created successfully!")
 
     except Exception as e:
         print_error(f"Failed to add ticket to registry: {e}")
@@ -196,7 +197,7 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
 
     # Print next steps
     console.print("\n[bold blue]Next steps:[/bold blue]")
-    console.print(f"  • Attach to agent terminal: [cyan]ccc attach {ticket_id} agent[/cyan]")
+    console.print(f"  • Attach to agent terminal: [cyan]ccc attach {branch_name} agent[/cyan]")
     console.print(f"  • View all tickets: [cyan]ccc list[/cyan]")
     console.print(f"  • Open in editor: [cyan]cd {wt_path} && cursor .[/cyan]\n")
 
@@ -229,9 +230,9 @@ def list(status: str):
     # Create table
     table = Table(title=f"Command Center Tickets ({len(tickets)})", show_header=True)
     table.add_column("ID", style="cyan")
+    table.add_column("Branch", style="blue")
     table.add_column("Title", style="white")
     table.add_column("Status", style="green")
-    table.add_column("Branch", style="blue")
     table.add_column("Updated", style="yellow")
 
     for ticket in tickets:
@@ -243,18 +244,21 @@ def list(status: str):
         }
         symbol = status_symbols.get(ticket.status, '○')
 
+        # Get display ID (extracted from branch name if available)
+        display_id = ticket.display_id or "-"
+
         # Get agent status if available
-        agent_status = read_agent_status(ticket.id)
+        agent_status = read_agent_status(ticket.branch)
         if agent_status and agent_status.current_task:
             status_text = f"{symbol} {agent_status.status}: {agent_status.current_task[:30]}"
         else:
             status_text = f"{symbol} {ticket.status}"
 
         table.add_row(
-            ticket.id,
-            ticket.title[:40],
+            display_id,
+            ticket.branch[:30],
+            ticket.title[:30],
             status_text,
-            ticket.branch[:40],
             format_time_ago(ticket.updated_at)
         )
 
@@ -272,32 +276,32 @@ def list(status: str):
 
 
 @cli.command()
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.option('--keep-worktree', is_flag=True, help='Keep the git worktree (only remove from registry)')
 @click.option('--force', '-f', is_flag=True, help='Skip confirmation prompt')
-def delete(ticket_id: str, keep_worktree: bool, force: bool):
+def delete(branch_name: str, keep_worktree: bool, force: bool):
     """
-    Delete a ticket and clean up its resources.
+    Delete a work item and clean up its resources.
 
-    TICKET_ID: The ticket to delete
+    BRANCH_NAME: The branch name of the work item to delete
 
     \b
     Examples:
-        ccc delete IN-413
-        ccc delete IN-413 --keep-worktree
-        ccc delete IN-413 --force
+        ccc delete feature/IN-413-add-api
+        ccc delete bugfix/auth-fix --keep-worktree
+        ccc delete feature/new-dashboard --force
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    ticket = registry.get(ticket_id)
+    ticket = registry.get(branch_name)
     if ticket is None:
-        print_error(f"Ticket {ticket_id} not found")
+        print_error(f"Work item for branch '{branch_name}' not found")
         sys.exit(1)
 
     # Confirm deletion
     if not force:
-        console.print(f"\n[bold yellow]About to delete ticket {ticket_id}:[/bold yellow]")
+        console.print(f"\n[bold yellow]About to delete work item for branch '{branch_name}':[/bold yellow]")
         console.print(f"  Title: {ticket.title}")
         console.print(f"  Worktree: {ticket.worktree_path}")
         console.print(f"  Tmux session: {ticket.tmux_session}")
@@ -331,34 +335,34 @@ def delete(ticket_id: str, keep_worktree: bool, force: bool):
 
     # Remove from registry
     print_info("Removing from registry...")
-    registry.delete(ticket_id)
+    registry.delete(branch_name)
 
-    print_success(f"\nTicket {ticket_id} deleted successfully")
+    print_success(f"\nWork item for branch '{branch_name}' deleted successfully")
 
 
 @cli.command()
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.argument('window', type=click.Choice(['agent', 'server', 'tests']))
-def attach(ticket_id: str, window: str):
+def attach(branch_name: str, window: str):
     """
-    Attach to a tmux window for a ticket.
+    Attach to a tmux window for a work item.
 
-    TICKET_ID: The ticket to attach to
+    BRANCH_NAME: The branch name of the work item to attach to
 
     WINDOW: Which terminal to attach to (agent, server, or tests)
 
     \b
     Examples:
-        ccc attach IN-413 agent
-        ccc attach IN-413 server
-        ccc attach IN-413 tests
+        ccc attach feature/IN-413-add-api agent
+        ccc attach bugfix/auth-fix server
+        ccc attach feature/new-dashboard tests
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    ticket = registry.get(ticket_id)
+    ticket = registry.get(branch_name)
     if ticket is None:
-        print_error(f"Ticket {ticket_id} not found")
+        print_error(f"Work item for branch '{branch_name}' not found")
         sys.exit(1)
 
     # Attach to session
@@ -373,33 +377,33 @@ def status():
 
 
 @status.command('update')
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.option('--status', '-s', required=True,
               type=click.Choice(['idle', 'working', 'complete', 'blocked', 'error']),
               help='Agent status')
 @click.option('--task', '-t', help='Current task description')
 @click.option('--blocked', is_flag=True, help='Mark as blocked')
 @click.option('--question', '-q', help='Add a question')
-def status_update(ticket_id: str, status: str, task: Optional[str], blocked: bool, question: Optional[str]):
+def status_update(branch_name: str, status: str, task: Optional[str], blocked: bool, question: Optional[str]):
     """
-    Update agent status for a ticket.
+    Update agent status for a work item.
 
     \b
     Examples:
-        ccc status update IN-413 --status working --task "Adding validation"
-        ccc status update IN-413 --status blocked --question "Use Zod or Joi?"
-        ccc status update IN-413 --status complete
+        ccc status update feature/IN-413-add-api --status working --task "Adding validation"
+        ccc status update bugfix/auth-fix --status blocked --question "Use Zod or Joi?"
+        ccc status update feature/new-dashboard --status complete
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"Work item for branch '{branch_name}' not found")
         sys.exit(1)
 
     # Update status
-    if update_status_file(ticket_id, status, task, blocked, question):
-        print_success(f"Updated status for {ticket_id}")
+    if update_status_file(branch_name, status, task, blocked, question):
+        print_success(f"Updated status for branch '{branch_name}'")
         if task:
             print_info(f"Task: {task}")
         if blocked:
@@ -410,32 +414,32 @@ def status_update(ticket_id: str, status: str, task: Optional[str], blocked: boo
 
 
 @status.command('show')
-@click.argument('ticket_id')
-def status_show(ticket_id: str):
+@click.argument('branch_name')
+def status_show(branch_name: str):
     """
-    Show agent status for a ticket.
+    Show agent status for a work item.
 
     \b
     Examples:
-        ccc status show IN-413
+        ccc status show feature/IN-413-add-api
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"Work item for branch '{branch_name}' not found")
         sys.exit(1)
 
     # Read status
-    agent_status = read_agent_status(ticket_id)
+    agent_status = read_agent_status(branch_name)
 
     if agent_status is None:
-        print_warning(f"No status file found for {ticket_id}")
+        print_warning(f"No status file found for branch '{branch_name}'")
         print_info("Agent may not have started yet")
         return
 
     # Display status
-    console.print(f"\n[bold]Agent Status: {ticket_id}[/bold]\n")
+    console.print(f"\n[bold]Agent Status: {branch_name}[/bold]\n")
     console.print(f"Status: [{_get_status_color(agent_status.status)}]{agent_status.status}[/]")
 
     if agent_status.current_task:
@@ -461,33 +465,33 @@ def build():
 
 
 @build.command('update')
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.option('--status', '-s', required=True,
               type=click.Choice(['passing', 'failing']),
               help='Build status')
 @click.option('--duration', '-d', type=int, help='Build duration in seconds')
 @click.option('--warnings', '-w', type=int, default=0, help='Number of warnings')
 @click.option('--errors', '-e', multiple=True, help='Error messages')
-def build_update(ticket_id: str, status: str, duration: Optional[int], warnings: int, errors: tuple):
+def build_update(branch_name: str, status: str, duration: Optional[int], warnings: int, errors: tuple):
     """
     Update build status for a ticket.
 
     \b
     Examples:
-        ccc build update IN-413 --status passing --duration 45
-        ccc build update IN-413 --status failing --duration 23 --errors "Syntax error in main.py"
+        ccc build update feature/IN-413-add-api --status passing --duration 45
+        ccc build update feature/IN-413-add-api --status failing --duration 23 --errors "Syntax error in main.py"
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"branch '{branch_name}' not found")
         sys.exit(1)
 
     # Update build status
     error_list = list(errors) if errors else None
-    if update_build_status(ticket_id, status, duration, error_list, warnings):
-        print_success(f"Updated build status for {ticket_id}")
+    if update_build_status(branch_name, status, duration, error_list, warnings):
+        print_success(f"Updated build status for branch '{branch_name}'")
         print_info(f"Status: {status}")
         if duration:
             print_info(f"Duration: {duration}s")
@@ -497,32 +501,32 @@ def build_update(ticket_id: str, status: str, duration: Optional[int], warnings:
 
 
 @build.command('show')
-@click.argument('ticket_id')
-def build_show(ticket_id: str):
+@click.argument('branch_name')
+def build_show(branch_name: str):
     """
     Show build status for a ticket.
 
     \b
     Examples:
-        ccc build show IN-413
+        ccc build show feature/IN-413-add-api
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"branch '{branch_name}' not found")
         sys.exit(1)
 
     # Read build status
-    build_status_obj = read_build_status(ticket_id)
+    build_status_obj = read_build_status(branch_name)
 
     if build_status_obj is None:
-        print_warning(f"No build status found for {ticket_id}")
+        print_warning(f"No build status found for branch '{branch_name}'")
         print_info("Run a build first or use 'ccc build update' to set status")
         return
 
     # Display status
-    console.print(f"\n[bold]Build Status: {ticket_id}[/bold]\n")
+    console.print(f"\n[bold]Build Status: {branch_name}[/bold]\n")
     console.print(format_build_status(build_status_obj))
     console.print()
 
@@ -534,7 +538,7 @@ def test():
 
 
 @test.command('update')
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.option('--status', '-s', required=True,
               type=click.Choice(['passing', 'failing']),
               help='Test status')
@@ -543,26 +547,26 @@ def test():
 @click.option('--passed', type=int, help='Number of passed tests')
 @click.option('--failed', type=int, help='Number of failed tests')
 @click.option('--skipped', type=int, help='Number of skipped tests')
-def test_update(ticket_id: str, status: str, duration: Optional[int], total: Optional[int],
+def test_update(branch_name: str, status: str, duration: Optional[int], total: Optional[int],
                 passed: Optional[int], failed: Optional[int], skipped: Optional[int]):
     """
     Update test status for a ticket.
 
     \b
     Examples:
-        ccc test update IN-413 --status passing --total 50 --passed 50 --failed 0
-        ccc test update IN-413 --status failing --total 50 --passed 47 --failed 3 --duration 12
+        ccc test update feature/IN-413-add-api --status passing --total 50 --passed 50 --failed 0
+        ccc test update feature/IN-413-add-api --status failing --total 50 --passed 47 --failed 3 --duration 12
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"branch '{branch_name}' not found")
         sys.exit(1)
 
     # Update test status
-    if update_test_status(ticket_id, status, duration, total, passed, failed, skipped):
-        print_success(f"Updated test status for {ticket_id}")
+    if update_test_status(branch_name, status, duration, total, passed, failed, skipped):
+        print_success(f"Updated test status for branch '{branch_name}'")
         print_info(f"Status: {status}")
         if total:
             print_info(f"Tests: {passed}/{total} passed")
@@ -572,26 +576,26 @@ def test_update(ticket_id: str, status: str, duration: Optional[int], total: Opt
 
 
 @test.command('parse')
-@click.argument('ticket_id')
+@click.argument('branch_name')
 @click.argument('output_file', type=click.Path(exists=True))
 @click.option('--framework', '-f', type=click.Choice(['auto', 'jest', 'pytest', 'go']),
               default='auto', help='Test framework type')
 @click.option('--duration', '-d', type=int, help='Test run duration in seconds')
 @click.option('--status', '-s', type=click.Choice(['passing', 'failing']), help='Override status')
-def test_parse(ticket_id: str, output_file: str, framework: str, duration: Optional[int], status: Optional[str]):
+def test_parse(branch_name: str, output_file: str, framework: str, duration: Optional[int], status: Optional[str]):
     """
     Parse test output file and update status.
 
     \b
     Examples:
-        ccc test parse IN-413 test-output.txt
-        ccc test parse IN-413 test-output.txt --framework jest --duration 12
+        ccc test parse feature/IN-413-add-api test-output.txt
+        ccc test parse feature/IN-413-add-api test-output.txt --framework jest --duration 12
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"branch '{branch_name}' not found")
         sys.exit(1)
 
     # Read output file
@@ -611,7 +615,7 @@ def test_parse(ticket_id: str, output_file: str, framework: str, duration: Optio
 
     # Update test status
     if update_test_status(
-        ticket_id,
+        branch_name,
         status,
         duration,
         parsed.get('total'),
@@ -619,7 +623,7 @@ def test_parse(ticket_id: str, output_file: str, framework: str, duration: Optio
         parsed.get('failed'),
         parsed.get('skipped'),
     ):
-        print_success(f"Updated test status for {ticket_id}")
+        print_success(f"Updated test status for branch '{branch_name}'")
         print_info(f"Parsed {parsed.get('total', 0)} tests: "
                   f"{parsed.get('passed', 0)} passed, "
                   f"{parsed.get('failed', 0)} failed, "
@@ -630,32 +634,32 @@ def test_parse(ticket_id: str, output_file: str, framework: str, duration: Optio
 
 
 @test.command('show')
-@click.argument('ticket_id')
-def test_show(ticket_id: str):
+@click.argument('branch_name')
+def test_show(branch_name: str):
     """
     Show test status for a ticket.
 
     \b
     Examples:
-        ccc test show IN-413
+        ccc test show feature/IN-413-add-api
     """
     registry = TicketRegistry()
 
     # Check if ticket exists
-    if not registry.exists(ticket_id):
-        print_error(f"Ticket {ticket_id} not found")
+    if not registry.exists(branch_name):
+        print_error(f"branch '{branch_name}' not found")
         sys.exit(1)
 
     # Read test status
-    test_status_obj = read_test_status(ticket_id)
+    test_status_obj = read_test_status(branch_name)
 
     if test_status_obj is None:
-        print_warning(f"No test status found for {ticket_id}")
+        print_warning(f"No test status found for branch '{branch_name}'")
         print_info("Run tests first or use 'ccc test update' to set status")
         return
 
     # Display status
-    console.print(f"\n[bold]Test Status: {ticket_id}[/bold]\n")
+    console.print(f"\n[bold]Test Status: {branch_name}[/bold]\n")
     console.print(format_test_status(test_status_obj))
     console.print()
 

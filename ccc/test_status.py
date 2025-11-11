@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from ccc.utils import get_ticket_dir
+from ccc.utils import get_ticket_dir, get_branch_dir
 
 
 @dataclass
@@ -31,9 +31,9 @@ class TestFailure:
 
 @dataclass
 class TestStatus:
-    """Represents the test status of a ticket."""
+    """Represents the test status of a branch."""
 
-    ticket_id: str
+    branch_name: str
     status: str  # "passing", "failing", "unknown"
     last_run: Optional[datetime] = None
     duration_seconds: int = 0
@@ -66,25 +66,32 @@ class TestStatus:
         else:
             data["failures"] = []
 
+        # Support old format with 'ticket_id' field for backwards compatibility
+        if "ticket_id" in data and "branch_name" not in data:
+            data["branch_name"] = data.pop("ticket_id")
+        elif "ticket_id" in data and "branch_name" in data:
+            # Both exist, remove 'ticket_id' to avoid duplicate argument
+            data.pop("ticket_id", None)
+
         return cls(**data)
 
 
-def get_test_status_path(ticket_id: str) -> Path:
-    """Get the path to the test status file for a ticket."""
-    return get_ticket_dir(ticket_id) / "test-status.json"
+def get_test_status_path(branch_name: str) -> Path:
+    """Get the path to the test status file for a branch."""
+    return get_branch_dir(branch_name) / "test-status.json"
 
 
-def read_test_status(ticket_id: str) -> Optional[TestStatus]:
+def read_test_status(branch_name: str) -> Optional[TestStatus]:
     """
     Read test status from file.
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
 
     Returns:
         TestStatus if file exists and is valid, None otherwise
     """
-    status_file = get_test_status_path(ticket_id)
+    status_file = get_test_status_path(branch_name)
 
     if not status_file.exists():
         return None
@@ -98,7 +105,7 @@ def read_test_status(ticket_id: str) -> Optional[TestStatus]:
     except Exception as e:
         from ccc.utils import print_warning
 
-        print_warning(f"Error reading test status for {ticket_id}: {e}")
+        print_warning(f"Error reading test status for {branch_name}: {e}")
         return None
 
 
@@ -113,7 +120,7 @@ def write_test_status(status: TestStatus) -> bool:
         True if successful, False otherwise
     """
     try:
-        status_file = get_test_status_path(status.ticket_id)
+        status_file = get_test_status_path(status.branch_name)
 
         # Ensure directory exists
         status_file.parent.mkdir(parents=True, exist_ok=True)
@@ -134,22 +141,22 @@ def write_test_status(status: TestStatus) -> bool:
         return False
 
 
-def init_test_status(ticket_id: str) -> None:
+def init_test_status(branch_name: str) -> None:
     """
-    Initialize a test status file for a new ticket.
+    Initialize a test status file for a new branch.
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
     """
     status = TestStatus(
-        ticket_id=ticket_id,
+        branch_name=branch_name,
         status="unknown",
     )
     write_test_status(status)
 
 
 def update_test_status(
-    ticket_id: str,
+    branch_name: str,
     status: str,
     duration: Optional[int] = None,
     total: Optional[int] = None,
@@ -162,7 +169,7 @@ def update_test_status(
     Update test status (helper function for CLI).
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
         status: Test status ("passing" or "failing")
         duration: Test run duration in seconds
         total: Total number of tests
@@ -175,9 +182,9 @@ def update_test_status(
         True if successful, False otherwise
     """
     # Read existing status or create new
-    test_status = read_test_status(ticket_id)
+    test_status = read_test_status(branch_name)
     if test_status is None:
-        test_status = TestStatus(ticket_id=ticket_id, status=status)
+        test_status = TestStatus(branch_name=branch_name, status=status)
     else:
         test_status.status = status
 
