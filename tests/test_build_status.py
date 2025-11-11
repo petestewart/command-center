@@ -116,11 +116,11 @@ class TestBuildStatusPaths:
     @patch("ccc.build_status.get_ticket_dir")
     def test_get_build_status_path(self, mock_get_ticket_dir):
         """Test getting build status file path."""
-        mock_get_ticket_dir.return_value = Path("/home/user/.cccc-control/TEST-001")
+        mock_get_ticket_dir.return_value = Path("/home/user/.ccc-control/TEST-001")
 
         path = get_build_status_path("TEST-001")
 
-        assert path == Path("/home/user/.cccc-control/TEST-001/build-status.json")
+        assert path == Path("/home/user/.ccc-control/TEST-001/build-status.json")
         mock_get_ticket_dir.assert_called_once_with("TEST-001")
 
 

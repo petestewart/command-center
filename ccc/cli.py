@@ -132,7 +132,7 @@ def create(ticket_id: str, title: str, worktree_path: Optional[str], branch: Opt
             repo_path = Path(result.stdout.strip())
         except subprocess.CalledProcessError:
             print_error("Not in a git repository and no base repository configured")
-            print_info("Either run this command from a git repository, or configure base_repo_path in ~/.cccc-control/config.yaml")
+            print_info("Either run this command from a git repository, or configure base_repo_path in ~/.ccc-control/config.yaml")
             sys.exit(1)
 
     console.print(f"\n[bold]Creating ticket {ticket_id}[/bold]\n")

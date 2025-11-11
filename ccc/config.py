@@ -52,7 +52,7 @@ def get_config_path() -> Path:
 
 def load_config() -> Config:
     """
-    Load configuration from ~/.cccc-control/config.yaml.
+    Load configuration from ~/.ccc-control/config.yaml.
     Creates default config if it doesn't exist.
     """
     config_path = get_config_path()
@@ -103,7 +103,7 @@ def load_config() -> Config:
 
 
 def save_config(config: Config) -> None:
-    """Save configuration to ~/.cccc-control/config.yaml."""
+    """Save configuration to ~/.ccc-control/config.yaml."""
     config_path = get_config_path()
 
     # Ensure parent directory exists
