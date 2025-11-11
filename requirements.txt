@@ -1,0 +1,19 @@
+# Command Center Dependencies
+
+# CLI framework - excellent for building complex CLIs with subcommands
+click>=8.1.0
+
+# Python tmux wrapper for session management
+libtmux>=0.23.0
+
+# YAML parsing for config and ticket storage
+pyyaml>=6.0
+
+# TUI framework (for Week 2+, but including now)
+textual>=0.40.0
+
+# Rich terminal formatting (used by textual and for CLI output)
+rich>=13.0.0
+
+# Date/time utilities
+python-dateutil>=2.8.0

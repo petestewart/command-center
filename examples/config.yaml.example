@@ -1,0 +1,24 @@
+# Command Center Configuration Example
+# Copy this file to ~/.ccc-control/config.yaml and customize
+
+# Base path for git worktrees
+# Each ticket will get its own subdirectory under this path
+base_worktree_path: ~/code/worktrees
+
+# Status polling interval in seconds
+# How often the TUI refreshes agent status (for Week 2+)
+status_poll_interval: 3
+
+# Tmux session name prefix
+# Sessions will be named: {prefix}{ticket-id}
+# Example: ccc-IN-413
+tmux_session_prefix: ccc-
+
+# Default git remote name
+# Used when pushing/pulling branches
+default_git_remote: origin
+
+# Base repository path (optional)
+# If set, worktrees will be created from this repository
+# If not set, the current git repository will be used
+# base_repo_path: ~/code/my-project

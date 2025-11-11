@@ -12,6 +12,7 @@ Phase 2 builds on the foundation by adding visibility into git status, build res
 ## Week 1: Git & Build Status Integration
 
 ### Objectives
+
 - Integrate git status checking
 - Track build status
 - Display in TUI with clear indicators
@@ -21,6 +22,7 @@ Phase 2 builds on the foundation by adding visibility into git status, build res
 #### 1.1 Git Status Integration
 
 **What to track:**
+
 - Modified files count
 - Untracked files count
 - Commits ahead of origin
@@ -28,6 +30,7 @@ Phase 2 builds on the foundation by adding visibility into git status, build res
 - Last commit message
 
 **Implementation:**
+
 ```python
 import subprocess
 from dataclasses import dataclass
@@ -43,7 +46,7 @@ class GitStatus:
 
 def get_git_status(worktree_path: str) -> GitStatus:
     """Query git for status information"""
-    
+
     # Get modified files
     result = subprocess.run(
         ["git", "diff", "--name-only"],
@@ -52,7 +55,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
         text=True
     )
     modified = result.stdout.strip().split('\n') if result.stdout else []
-    
+
     # Get untracked files
     result = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -61,7 +64,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
         text=True
     )
     untracked = result.stdout.strip().split('\n') if result.stdout else []
-    
+
     # Get commits ahead
     result = subprocess.run(
         ["git", "rev-list", "--count", "HEAD", "^origin/HEAD"],
@@ -70,7 +73,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
         text=True
     )
     commits_ahead = int(result.stdout.strip()) if result.stdout else 0
-    
+
     # Get last commit info
     result = subprocess.run(
         ["git", "log", "-1", "--format=%s|||%ct"],
@@ -85,7 +88,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
     else:
         last_commit = "No commits"
         last_commit_time = None
-    
+
     return GitStatus(
         modified_files=modified,
         untracked_files=untracked,
@@ -97,6 +100,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
 ```
 
 **Display in TUI:**
+
 ```
 ┌─ Git Status ───────────────────────────────────┐
 │ Branch: feature/IN-413-bulk-uploads            │
@@ -109,6 +113,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
 ```
 
 **Optimization:**
+
 - Cache git status for 10 seconds to avoid excessive git calls
 - Run git checks in background thread
 - Show stale indicator if cache older than configured threshold
@@ -119,6 +124,7 @@ def get_git_status(worktree_path: str) -> GitStatus:
 Watch for build output in a known location or parse known build commands
 
 **Build status file format:**
+
 ```json
 {
   "ticket_id": "IN-413",
@@ -130,19 +136,21 @@ Watch for build output in a known location or parse known build commands
 }
 ```
 
-**Location:** `~/.cc-control/<ticket-id>/build-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/build-status.json`
 
 **How to populate:**
 
 Option A: Manual update after build
+
 ```bash
-$ npm run build && cc build success IN-413
-$ npm run build || cc build failure IN-413
+$ npm run build && ccc build success IN-413
+$ npm run build || ccc build failure IN-413
 ```
 
 Option B: Wrapper script that automatically updates
+
 ```bash
-# ~/.cc-control/bin/cc-build
+# ~/.ccc-control/bin/ccc-build
 #!/bin/bash
 TICKET_ID=$1
 shift
@@ -161,22 +169,25 @@ END=$(date +%s)
 DURATION=$((END - START))
 
 # Update build status
-cc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION"
+`ccc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION"
 exit $EXIT_CODE
 ```
 
 Usage:
+
 ```bash
-$ cc-build IN-413 npm run build
+$ cccc-build IN-413 npm run build
 ```
 
 **CLI commands:**
+
 ```bash
-$ cc build update <ticket-id> --status <passing|failing> --duration <seconds>
-$ cc build show <ticket-id>
+$ ccc build update <ticket-id> --status <passing|failing> --duration <seconds>
+$ ccc build show <ticket-id>
 ```
 
 **Display in TUI:**
+
 ```
 ┌─ Build Status ─────────────────────────────────┐
 │ Status: ✓ Passing                              │
@@ -186,6 +197,7 @@ $ cc build show <ticket-id>
 ```
 
 Or if failing:
+
 ```
 ┌─ Build Status ─────────────────────────────────┐
 │ Status: ✗ Failing                              │
@@ -200,15 +212,16 @@ Or if failing:
 ✅ Git status querying working  
 ✅ Git status displayed in ticket detail view  
 ✅ Build status file format defined  
-✅ `cc build` CLI commands implemented  
+✅ `ccc build` CLI commands implemented  
 ✅ Build status displayed in TUI  
-✅ Wrapper script for automatic build tracking  
+✅ Wrapper script for automatic build tracking
 
 ---
 
 ## Week 2: Test Results Integration
 
 ### Objectives
+
 - Track test execution results
 - Parse common test output formats
 - Display pass/fail/skip counts
@@ -218,6 +231,7 @@ Or if failing:
 #### 2.1 Test Results Tracking
 
 **Test status file format:**
+
 ```json
 {
   "ticket_id": "IN-413",
@@ -239,20 +253,23 @@ Or if failing:
 }
 ```
 
-**Location:** `~/.cc-control/<ticket-id>/test-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/test-status.json`
 
 #### 2.2 Test Output Parsing
 
 Support common test frameworks:
 
 **Jest (JavaScript/TypeScript):**
+
 ```javascript
 // Parse Jest output
 // "Tests: 2 failed, 47 passed, 1 skipped, 50 total"
-const JEST_PATTERN = /Tests:\s+(\d+)\s+failed,\s+(\d+)\s+passed,\s+(\d+)\s+skipped,\s+(\d+)\s+total/;
+const JEST_PATTERN =
+  /Tests:\s+(\d+)\s+failed,\s+(\d+)\s+passed,\s+(\d+)\s+skipped,\s+(\d+)\s+total/;
 ```
 
 **pytest (Python):**
+
 ```python
 # Parse pytest output
 # "47 passed, 2 failed, 1 skipped in 12.34s"
@@ -260,14 +277,16 @@ PYTEST_PATTERN = r'(\d+) passed, (\d+) failed, (\d+) skipped in ([\d.]+)s'
 ```
 
 **Go test:**
+
 ```go
 // Parse go test output
 // "PASS: 47 | FAIL: 2 | SKIP: 1"
 ```
 
 **Wrapper script:**
+
 ```bash
-# ~/.cc-control/bin/cc-test
+# ~/.ccc-control/bin/ccc-test
 #!/bin/bash
 TICKET_ID=$1
 shift
@@ -285,26 +304,29 @@ END=$(date +%s)
 DURATION=$((END - START))
 
 # Parse output and update test status
-cc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS"
+`ccc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS"
 rm "$TMPFILE"
 ```
 
 **CLI commands:**
+
 ```bash
-$ cc test update <ticket-id> --passed <n> --failed <n> --total <n>
-$ cc test parse <ticket-id> <output-file>
-$ cc test show <ticket-id>
+$ ccc test update <ticket-id> --passed <n> --failed <n> --total <n>
+$ ccc test parse <ticket-id> <output-file>
+$ ccc test show <ticket-id>
 ```
 
 #### 2.3 Test Status Display
 
 **In list view (summary):**
+
 ```
 ● IN-413  Public API bulk uploads      ⚠ 47/50 tests    2m ago
                                          ↑ indicates some failures
 ```
 
 **In detail view:**
+
 ```
 ┌─ Test Status ──────────────────────────────────┐
 │ Status: ⚠ 47 of 50 passing (94%)              │
@@ -325,6 +347,7 @@ $ cc test show <ticket-id>
 #### 2.4 Enhanced Status Panel
 
 **New layout with all status types:**
+
 ```
 ┌─ Ticket Detail: IN-413 ────────────────────────┐
 │                                                │
@@ -356,8 +379,9 @@ $ cc test show <ticket-id>
 #### 2.5 Configurable Refresh
 
 **Add configuration options:**
+
 ```yaml
-# ~/.cc-control/config.yaml
+# ~/.ccc-control/config.yaml
 status_poll_interval: 3
 git_status_cache_seconds: 10
 build_status_cache_seconds: 30
@@ -371,34 +395,37 @@ Press `r` in TUI to force immediate refresh of all status
 
 ✅ Test status file format defined  
 ✅ Test output parsers for major frameworks  
-✅ `cc test` CLI commands implemented  
+✅ `ccc test` CLI commands implemented  
 ✅ Test status displayed in TUI  
 ✅ Wrapper script for automatic test tracking  
 ✅ Enhanced status panel showing all status types  
 ✅ Configurable refresh intervals  
-✅ Manual refresh working  
+✅ Manual refresh working
 
 ---
 
 ## Phase 2 Success Criteria
 
 ### Visibility Improvements
+
 ✅ Can see git status without running `git status`  
 ✅ Can see build status without checking build output  
 ✅ Can see test results without running tests  
 ✅ All status information visible in single view  
-✅ Status updates within 5 seconds of actual changes  
+✅ Status updates within 5 seconds of actual changes
 
 ### Developer Experience
+
 ✅ Wrapper scripts are easy to integrate into workflow  
 ✅ Status indicators use clear symbols and colors  
 ✅ Failed tests show enough detail to investigate  
-✅ Manual refresh works when needed  
+✅ Manual refresh works when needed
 
 ### Performance
+
 ✅ Git status queries don't slow down TUI  
 ✅ Background polling uses minimal CPU  
-✅ Large test suites don't cause TUI lag  
+✅ Large test suites don't cause TUI lag
 
 ---
 
@@ -407,20 +434,22 @@ Press `r` in TUI to force immediate refresh of all status
 ### For JavaScript/Node.js Project
 
 **package.json:**
+
 ```json
 {
   "scripts": {
-    "build": "cc-build $(cat .cc-ticket) tsc",
-    "test": "cc-test $(cat .cc-ticket) jest",
+    "build": "ccc-build $(cat .ccc-ticket) tsc",
+    "test": "ccc-test $(cat .ccc-ticket) jest",
     "dev": "npm run build && node dist/index.js"
   }
 }
 ```
 
 **Set ticket context:**
+
 ```bash
 # In agent terminal
-echo "IN-413" > .cc-ticket
+echo "IN-413" > .ccc-ticket
 npm run build  # Automatically tracked
 npm test       # Automatically tracked
 ```
@@ -428,26 +457,28 @@ npm test       # Automatically tracked
 ### For Python Project
 
 **Makefile:**
+
 ```makefile
-TICKET := $(shell cat .cc-ticket)
+TICKET := $(shell cat .ccc-ticket)
 
 build:
-	cc-build $(TICKET) python -m build
+	ccc-build $(TICKET) python -m build
 
 test:
-	cc-test $(TICKET) pytest
+	ccc-test $(TICKET) pytest
 
 lint:
-	cc-build $(TICKET) ruff check .
+	ccc-build $(TICKET) ruff check .
 ```
 
 ### For Go Project
 
-**.cc-build.sh:**
+**.ccc-build.sh:**
+
 ```bash
 #!/bin/bash
-TICKET=$(cat .cc-ticket)
-cc-build $TICKET go build ./...
+TICKET=$(cat .ccc-ticket)
+ccc-build $TICKET go build ./...
 ```
 
 ---
@@ -458,7 +489,7 @@ Need to add to documentation:
 
 1. **INTEGRATION_GUIDE.md** - How to integrate with build/test commands
 2. **STATUS_FILES.md** - All status file formats
-3. **WRAPPER_SCRIPTS.md** - Using cc-build and cc-test wrappers
+3. **WRAPPER_SCRIPTS.md** - Using cccc-build and cccc-test wrappers
 4. **CONFIGURATION.md** - All config options
 
 ---
@@ -471,7 +502,7 @@ These remain out of scope:
 ❌ No deep git integration (commit, push, etc.)  
 ❌ No CI/CD integration  
 ❌ No code coverage metrics  
-❌ Test failure stack traces (just names and locations)  
+❌ Test failure stack traces (just names and locations)
 
 ---
 
@@ -489,6 +520,7 @@ For users upgrading from Phase 1:
 ## Testing Plan
 
 ### Git Status Testing
+
 - Test with clean working directory
 - Test with modified files
 - Test with untracked files
@@ -496,12 +528,14 @@ For users upgrading from Phase 1:
 - Test with merge conflicts
 
 ### Build Status Testing
+
 - Test successful builds
 - Test failing builds
 - Test builds with warnings
 - Test concurrent builds (should queue)
 
 ### Test Status Testing
+
 - Test all-passing test suite
 - Test partial failures
 - Test all-failing test suite
@@ -509,6 +543,7 @@ For users upgrading from Phase 1:
 - Test timeout scenarios
 
 ### Integration Testing
+
 - Modify code, verify git status updates
 - Run build, verify build status updates
 - Run tests, verify test status updates
@@ -519,6 +554,7 @@ For users upgrading from Phase 1:
 ## Next Steps to Phase 3
 
 After Phase 2 completes:
+
 - User testing with enhanced visibility
 - Gather feedback on wrapper scripts
 - Identify most-requested actions to add to Phase 3

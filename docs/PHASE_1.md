@@ -12,6 +12,7 @@ Phase 1 establishes the foundation: ticket management, tmux orchestration, basic
 ## Week 1: CLI + Tmux Session Management
 
 ### Objectives
+
 - Set up project structure and tooling
 - Implement CLI commands for ticket lifecycle
 - Build tmux session orchestration layer
@@ -19,7 +20,9 @@ Phase 1 establishes the foundation: ticket management, tmux orchestration, basic
 ### Technical Components
 
 #### 1.1 Project Setup
+
 **Files to create:**
+
 ```
 cc/
 ├── cli.py           # CLI entry point and command routing
@@ -31,22 +34,25 @@ cc/
 ```
 
 **Dependencies:**
+
 - Python 3.10+
 - `libtmux` - Python wrapper for tmux
 - `pyyaml` - YAML parsing for config/state
 - `click` - CLI framework (or `argparse` for simpler option)
 
 **Configuration file format:**
+
 ```yaml
-# ~/.cc-control/config.yaml
+# ~/.ccc-control/config.yaml
 base_worktree_path: ~/code/worktrees
 status_poll_interval: 3
-tmux_session_prefix: cc-
+tmux_session_prefix: ccc-
 ```
 
 #### 1.2 Ticket Registry
 
 **Data structure:**
+
 ```python
 @dataclass
 class Ticket:
@@ -56,12 +62,13 @@ class Ticket:
     worktree_path: str         # e.g., "~/code/worktrees/IN-413"
     created_at: datetime
     status: str                # "active", "complete", "blocked"
-    tmux_session: str          # e.g., "cc-IN-413"
+    tmux_session: str          # e.g., "ccc-IN-413"
 ```
 
-**Storage location:** `~/.cc-control/tickets.yaml`
+**Storage location:** `~/.ccc-control/tickets.yaml`
 
 **Example tickets file:**
+
 ```yaml
 tickets:
   - id: IN-413
@@ -70,20 +77,21 @@ tickets:
     worktree_path: /home/user/code/worktrees/IN-413
     created_at: 2025-11-09T10:23:00Z
     status: active
-    tmux_session: cc-IN-413
-    
+    tmux_session: ccc-IN-413
+
   - id: IN-407
     title: Refactor auth middleware
     branch: feature/IN-407-auth-refactor
     worktree_path: /home/user/code/worktrees/IN-407
     created_at: 2025-11-08T14:15:00Z
     status: complete
-    tmux_session: cc-IN-407
+    tmux_session: ccc-IN-407
 ```
 
 #### 1.3 CLI Commands
 
-**`cc create <ticket-id> <title>`**
+**`ccc create <ticket-id> <title>`**
+
 ```python
 def create_ticket(ticket_id: str, title: str) -> None:
     """
@@ -97,22 +105,24 @@ def create_ticket(ticket_id: str, title: str) -> None:
 ```
 
 **Example usage:**
+
 ```bash
-$ cc create IN-413 "Public API bulk uploads"
+$ ccc create IN-413 "Public API bulk uploads"
 ✓ Created ticket IN-413
 ✓ Created worktree at ~/code/worktrees/IN-413
 ✓ Created branch feature/IN-413-bulk-uploads
-✓ Created tmux session cc-IN-413 with windows:
+✓ Created tmux session ccc-IN-413 with windows:
   - agent (window 0)
   - server (window 1)
   - tests (window 2)
 
 Next steps:
-  - Attach to agent terminal: cc attach IN-413 agent
+  - Attach to agent terminal: ccc attach IN-413 agent
   - Or open Command Center: cc
 ```
 
-**`cc list`**
+**`ccc list`**
+
 ```python
 def list_tickets() -> None:
     """
@@ -123,8 +133,9 @@ def list_tickets() -> None:
 ```
 
 **Example output:**
+
 ```bash
-$ cc list
+$ ccc list
 ID      TITLE                        STATUS      UPDATED
 IN-413  Public API bulk uploads      Working     2m ago
 IN-407  Refactor auth middleware     Complete    1h ago
@@ -133,7 +144,8 @@ IN-391  Database migration           Blocked     3h ago
 3 tickets total (1 active, 1 complete, 1 blocked)
 ```
 
-**`cc delete <ticket-id>`**
+**`ccc delete <ticket-id>`**
+
 ```python
 def delete_ticket(ticket_id: str) -> None:
     """
@@ -145,7 +157,8 @@ def delete_ticket(ticket_id: str) -> None:
     """
 ```
 
-**`cc attach <ticket-id> <window>`**
+**`ccc attach <ticket-id> <window>`**
+
 ```python
 def attach_to_terminal(ticket_id: str, window: str) -> None:
     """
@@ -156,16 +169,18 @@ def attach_to_terminal(ticket_id: str, window: str) -> None:
 ```
 
 **Example usage:**
+
 ```bash
-$ cc attach IN-413 agent
-# Attaches to tmux session cc-IN-413, window 0 (agent)
+$ ccc attach IN-413 agent
+# Attaches to tmux session ccc-IN-413, window 0 (agent)
 ```
 
 #### 1.4 Tmux Session Management
 
 **Session structure:**
+
 ```
-Session: cc-IN-413
+Session: ccc-IN-413
 ├── Window 0: agent
 │   └── Working directory: ~/code/worktrees/IN-413
 │   └── Initial command: bash (user starts claude code manually)
@@ -180,6 +195,7 @@ Session: cc-IN-413
 ```
 
 **Implementation:**
+
 ```python
 import libtmux
 
@@ -190,21 +206,22 @@ def create_tmux_session(ticket: Ticket) -> None:
         window_name="agent",
         start_directory=ticket.worktree_path
     )
-    
+
     # Create additional windows
     session.new_window("server", start_directory=ticket.worktree_path)
     session.new_window("tests", start_directory=ticket.worktree_path)
-    
+
     # Don't attach yet - just create
 ```
 
 **Attach mechanism:**
+
 ```python
 def attach_to_window(ticket_id: str, window_name: str) -> None:
     ticket = load_ticket(ticket_id)
     window_map = {"agent": 0, "server": 1, "tests": 2}
     window_idx = window_map[window_name]
-    
+
     # Execute tmux attach in current terminal
     os.system(f"tmux attach-session -t {ticket.tmux_session}:{window_idx}")
 ```
@@ -213,15 +230,16 @@ def attach_to_window(ticket_id: str, window_name: str) -> None:
 
 ✅ Project structure created  
 ✅ Configuration system working  
-✅ `cc create` creates ticket + worktree + tmux session  
-✅ `cc list` shows all tickets  
-✅ `cc attach` switches to any terminal  
-✅ `cc delete` cleans up ticket  
+✅ `ccc create` creates ticket + worktree + tmux session  
+✅ `ccc list` shows all tickets  
+✅ `ccc attach` switches to any terminal  
+✅ `ccc delete` cleans up ticket  
 ✅ Basic error handling (ticket not found, etc.)
 
 ### Week 1 Testing Plan
 
 **Manual tests:**
+
 1. Create 3 tickets with different IDs
 2. Verify worktrees created in correct locations
 3. Verify branches checked out
@@ -230,6 +248,7 @@ def attach_to_window(ticket_id: str, window_name: str) -> None:
 6. Delete a ticket, verify cleanup
 
 **Edge cases to test:**
+
 - Create ticket with duplicate ID (should error)
 - Attach to non-existent ticket (should error)
 - Delete ticket with running tmux session
@@ -240,6 +259,7 @@ def attach_to_window(ticket_id: str, window_name: str) -> None:
 ## Week 2: Basic TUI
 
 ### Objectives
+
 - Build terminal UI using Textual framework
 - Implement ticket list and detail views
 - Enable keyboard navigation and shortcuts
@@ -249,9 +269,11 @@ def attach_to_window(ticket_id: str, window_name: str) -> None:
 #### 2.1 TUI Framework Setup
 
 **Add dependencies:**
+
 - `textual` - Modern TUI framework with excellent docs
 
 **Main TUI structure:**
+
 ```python
 from textual.app import App
 from textual.containers import Container
@@ -259,14 +281,14 @@ from textual.widgets import Header, Footer, Static
 
 class CommandCenterApp(App):
     """Main TUI application"""
-    
+
     CSS_PATH = "cc.css"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("?", "help", "Help"),
         ("r", "refresh", "Refresh"),
     ]
-    
+
     def compose(self):
         yield Header()
         yield Container(
@@ -279,6 +301,7 @@ class CommandCenterApp(App):
 #### 2.2 Ticket List View
 
 **Component hierarchy:**
+
 ```
 TicketListView (Container)
 └── TicketList (ListView)
@@ -288,21 +311,23 @@ TicketListView (Container)
 ```
 
 **TicketItem display:**
+
 ```python
 class TicketItem(ListItem):
     def __init__(self, ticket: Ticket):
         super().__init__()
         self.ticket = ticket
-    
+
     def render(self) -> str:
         status_symbol = self._get_status_symbol()
         status_text = self._get_status_text()
         time_ago = self._format_time_ago()
-        
+
         return f"{status_symbol} {self.ticket.id}  {self.ticket.title:<40} {status_text:>12} {time_ago:>10}"
 ```
 
 **Keyboard bindings in list view:**
+
 - `j`/`↓` - Move selection down
 - `k`/`↑` - Move selection up
 - `Enter` - Open ticket detail view
@@ -312,6 +337,7 @@ class TicketItem(ListItem):
 #### 2.3 Ticket Detail View
 
 **Layout:**
+
 ```
 ┌─ Ticket Detail ────────────────────────────────────────┐
 │ ID: IN-413                                             │
@@ -326,6 +352,7 @@ class TicketItem(ListItem):
 ```
 
 **Keyboard bindings in detail view:**
+
 - `Esc` - Return to list view
 - `a` - Jump to agent terminal
 - `s` - Jump to server terminal
@@ -334,31 +361,34 @@ class TicketItem(ListItem):
 #### 2.4 Terminal Navigation Integration
 
 **Challenge:** When user presses `a`, we need to:
+
 1. Suspend the TUI
 2. Attach to tmux session
 3. When user detaches, resume TUI
 
 **Implementation approach:**
+
 ```python
 class TicketDetailView(Container):
     def action_jump_to_agent(self):
         # Suspend TUI
         self.app.suspend()
-        
+
         # Attach to tmux
         ticket = self.current_ticket
         os.system(f"tmux attach-session -t {ticket.tmux_session}:0")
-        
+
         # This blocks until user detaches from tmux
         # When they detach, resume TUI
         self.app.resume()
-        
+
         # Refresh status when returning
         self.refresh_status()
 ```
 
 **User instructions:**
 When jumping to terminal, briefly show:
+
 ```
 Attaching to agent terminal...
 Press [Ctrl-b] then [d] to return to Command Center
@@ -367,34 +397,35 @@ Press [Ctrl-b] then [d] to return to Command Center
 #### 2.5 Styling
 
 **CSS for Textual:**
+
 ```css
 /* cc.css */
 
 TicketItem {
-    height: 3;
-    padding: 1;
+  height: 3;
+  padding: 1;
 }
 
 TicketItem:focus {
-    background: $accent;
+  background: $accent;
 }
 
 .status-working {
-    color: $success;
+  color: $success;
 }
 
 .status-complete {
-    color: $secondary;
+  color: $secondary;
 }
 
 .status-blocked {
-    color: $warning;
+  color: $warning;
 }
 
 StatusPanel {
-    border: solid $primary;
-    height: 8;
-    padding: 1;
+  border: solid $primary;
+  height: 8;
+  padding: 1;
 }
 ```
 
@@ -411,6 +442,7 @@ StatusPanel {
 ### Week 2 Testing Plan
 
 **Manual tests:**
+
 1. Launch TUI, verify all tickets shown
 2. Navigate with j/k keys
 3. Press Enter, verify detail view appears
@@ -420,6 +452,7 @@ StatusPanel {
 7. Create ticket from TUI (n key)
 
 **UI tests:**
+
 - Verify colors appear correctly
 - Verify layout doesn't break on small terminals (80x24)
 - Verify layout adapts to larger terminals
@@ -429,6 +462,7 @@ StatusPanel {
 ## Week 3: Status Tracking
 
 ### Objectives
+
 - Define agent status file format
 - Implement file watching and polling
 - Display real-time status in TUI
@@ -437,9 +471,10 @@ StatusPanel {
 
 #### 3.1 Agent Status File Format
 
-**Location:** `~/.cc-control/<ticket-id>/agent-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/agent-status.json`
 
 **Format:**
+
 ```json
 {
   "ticket_id": "IN-413",
@@ -456,6 +491,7 @@ StatusPanel {
 ```
 
 **Status values:**
+
 - `idle` - Agent waiting for instructions
 - `working` - Agent actively coding
 - `complete` - Agent finished all work
@@ -468,17 +504,19 @@ Agents (or developers manually) update this file periodically:
 
 ```bash
 # From agent terminal, agent could run:
-echo '{"status": "working", "current_task": "Adding validation", "last_update": "'$(date -Iseconds)'"}' > ~/.cc-control/IN-413/agent-status.json
+echo '{"status": "working", "current_task": "Adding validation", "last_update": "'$(date -Iseconds)'"}' > ~/.ccc-control/IN-413/agent-status.json
 ```
 
 Or use a helper script we provide:
+
 ```bash
-cc status update IN-413 --status working --task "Adding validation"
+`ccc status update IN-413 --status working --task "Adding validation"
 ```
 
 #### 3.2 Status Polling
 
 **Polling mechanism:**
+
 ```python
 import time
 from watchdog.observers import Observer
@@ -488,15 +526,15 @@ class StatusWatcher:
     def __init__(self, ticket_id: str, callback):
         self.ticket_id = ticket_id
         self.callback = callback
-        self.status_file = f"~/.cc-control/{ticket_id}/agent-status.json"
-        
+        self.status_file = f"~/.ccc-control/{ticket_id}/agent-status.json"
+
     def start(self):
         # Simple polling approach for Phase 1
         while True:
             status = self._read_status()
             self.callback(status)
             time.sleep(3)  # Poll every 3 seconds
-    
+
     def _read_status(self) -> dict:
         try:
             with open(self.status_file) as f:
@@ -506,13 +544,14 @@ class StatusWatcher:
 ```
 
 **Integration with TUI:**
+
 ```python
 class CommandCenterApp(App):
     def on_mount(self):
         # Start status polling in background thread
         self.status_watcher = StatusWatcher("IN-413", self.update_status)
         threading.Thread(target=self.status_watcher.start, daemon=True).start()
-    
+
     def update_status(self, status: dict):
         # Update TUI with new status
         self.query_one(TicketListView).update_ticket_status(status)
@@ -521,12 +560,14 @@ class CommandCenterApp(App):
 #### 3.3 Status Display in TUI
 
 **In list view:**
+
 ```
 ● IN-413  Public API bulk uploads      ⚙ Working    2m ago
                                        ↑ status     ↑ time since last update
 ```
 
 **In detail view:**
+
 ```
 ┌─ Agent Status ─────────────────────────────────┐
 │ Status: ⚙ Working                              │
@@ -540,6 +581,7 @@ class CommandCenterApp(App):
 **Status change notifications:**
 
 When status changes (e.g., from "working" to "complete"), briefly show toast:
+
 ```
 [✓] IN-413: Agent completed work
 ```
@@ -547,16 +589,19 @@ When status changes (e.g., from "working" to "complete"), briefly show toast:
 #### 3.4 Graceful Degradation
 
 **If status file doesn't exist:**
+
 - Show status as "Unknown"
 - Don't error or crash
 - Display helpful message: "Agent hasn't started yet"
 
 **If status file is stale (>1 hour old):**
+
 - Show status with ⚠ warning symbol
 - Gray out the status
 - Add note: "Last update 3 hours ago - may be stale"
 
 **If status file is malformed:**
+
 - Log error
 - Show status as "Error reading status"
 - Don't crash TUI
@@ -565,21 +610,23 @@ When status changes (e.g., from "working" to "complete"), briefly show toast:
 
 To make it easy for agents (or developers testing) to update status:
 
-**`cc status update <ticket-id> [options]`**
+**`ccc status update <ticket-id> [options]`**
+
 ```bash
-$ cc status update IN-413 --status working --task "Adding validation"
+$ ccc status update IN-413 --status working --task "Adding validation"
 ✓ Updated status for IN-413
 
-$ cc status update IN-413 --status blocked --question "Should we use Zod or Joi?"
+$ ccc status update IN-413 --status blocked --question "Should we use Zod or Joi?"
 ✓ Updated status for IN-413 (blocked, awaiting answer)
 
-$ cc status update IN-413 --status complete
+$ ccc status update IN-413 --status complete
 ✓ Updated status for IN-413 (work complete)
 ```
 
-**`cc status show <ticket-id>`**
+**`ccc status show <ticket-id>`**
+
 ```bash
-$ cc status show IN-413
+$ ccc status show IN-413
 Status: Working
 Task: Adding input validation
 Updated: 2 minutes ago
@@ -592,13 +639,14 @@ Questions: None
 ✅ Status file format defined and documented  
 ✅ Status polling working in background  
 ✅ TUI displays live status updates  
-✅ `cc status` CLI commands working  
+✅ `ccc status` CLI commands working  
 ✅ Graceful handling of missing/stale status  
-✅ Status change notifications appearing  
+✅ Status change notifications appearing
 
 ### Week 3 Testing Plan
 
 **Manual tests:**
+
 1. Create ticket, start TUI
 2. Manually update status file
 3. Verify TUI updates within 3 seconds
@@ -607,8 +655,9 @@ Questions: None
 6. Create malformed JSON in status file, verify no crash
 
 **Integration tests:**
-1. Create ticket with `cc create`
-2. Update status with `cc status update`
+
+1. Create ticket with `ccc create`
+2. Update status with `ccc status update`
 3. Verify TUI shows correct status
 4. Update status to "complete"
 5. Verify toast notification appears
@@ -620,22 +669,25 @@ Questions: None
 At the end of Phase 1, the following must be possible:
 
 ### Core Workflow
+
 ✅ Developer can create a new ticket in <10 seconds  
 ✅ Developer can see all active tickets in one view  
 ✅ Developer can jump to any terminal context in <2 seconds  
-✅ Agent status updates appear automatically without manual checking  
+✅ Agent status updates appear automatically without manual checking
 
 ### User Experience
+
 ✅ TUI is intuitive - first-time user can navigate without docs  
 ✅ Keyboard shortcuts feel natural (vim-like navigation)  
 ✅ No crashes or hangs during normal operation  
-✅ Error messages are clear and actionable  
+✅ Error messages are clear and actionable
 
 ### Technical Quality
+
 ✅ All CLI commands have help text and examples  
 ✅ Ticket registry persists across sessions  
 ✅ Tmux sessions survive terminal closures  
-✅ Status polling uses <1% CPU  
+✅ Status polling uses <1% CPU
 
 ---
 
@@ -649,24 +701,29 @@ These are explicitly out of scope and will be addressed in later phases:
 ❌ No diff viewing - developer uses `git diff` in terminal  
 ❌ No IDE integration - developer opens IDE separately  
 ❌ No multi-agent support - assumes one agent per ticket  
-❌ No team features - single developer use only  
+❌ No team features - single developer use only
 
 ---
 
 ## Risk Mitigation
 
 ### Risk: Tmux not installed
+
 **Mitigation:** Check for tmux on first run, show installation instructions if missing
 
 ### Risk: TUI doesn't work on user's terminal
+
 **Mitigation:** Test on common terminals (iTerm2, Alacritty, gnome-terminal), document requirements
 
 ### Risk: Status polling is too slow
+
 **Mitigation:** Make poll interval configurable, provide manual refresh option
 
 ### Risk: Developers don't update status files
-**Mitigation:** 
-- Make `cc status update` command very easy to use
+
+**Mitigation:**
+
+- Make `ccc status update` command very easy to use
 - Provide shell aliases/shortcuts
 - In later phases, integrate with Claude Code directly
 
