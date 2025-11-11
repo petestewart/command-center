@@ -2,30 +2,36 @@
 #
 # cc-build - Build wrapper script for Command Center
 #
-# Usage: cc-build <ticket-id> <build-command> [args...]
+# Usage: cc-build <build-command> [args...]
 #
-# Automatically tracks build status for a ticket by:
-# 1. Recording build start time
-# 2. Running the build command
-# 3. Capturing exit code
-# 4. Updating build status via `ccc build update`
-# 5. Preserving original exit code
+# Automatically tracks build status for the current branch by:
+# 1. Detecting current git branch
+# 2. Recording build start time
+# 3. Running the build command
+# 4. Capturing exit code
+# 5. Updating build status via `ccc build update`
+# 6. Preserving original exit code
 
 set -o pipefail
 
 # Check arguments
-if [ $# -lt 2 ]; then
-    echo "Usage: cc-build <ticket-id> <build-command> [args...]" >&2
+if [ $# -lt 1 ]; then
+    echo "Usage: cc-build <build-command> [args...]" >&2
     echo "" >&2
     echo "Examples:" >&2
-    echo "  cc-build IN-413 npm run build" >&2
-    echo "  cc-build IN-413 python -m build" >&2
-    echo "  cc-build IN-413 go build ./..." >&2
+    echo "  cc-build npm run build" >&2
+    echo "  cc-build python -m build" >&2
+    echo "  cc-build go build ./..." >&2
     exit 1
 fi
 
-TICKET_ID="$1"
-shift
+# Auto-detect current branch
+BRANCH_NAME=$(git branch --show-current 2>/dev/null)
+
+if [ -z "$BRANCH_NAME" ]; then
+    echo "Error: Not in a git repository or not on a branch" >&2
+    exit 1
+fi
 
 # Record start time
 START=$(date +%s)
@@ -49,8 +55,8 @@ else
 fi
 
 # Update build status
-ccc build update "$TICKET_ID" --status "$STATUS" --duration "$DURATION" 2>/dev/null || {
-    echo "Warning: Failed to update build status for $TICKET_ID" >&2
+ccc build update "$BRANCH_NAME" --status "$STATUS" --duration "$DURATION" 2>/dev/null || {
+    echo "Warning: Failed to update build status for branch '$BRANCH_NAME'" >&2
 }
 
 # Exit with original exit code

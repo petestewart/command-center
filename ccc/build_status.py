@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from ccc.utils import get_ticket_dir
+from ccc.utils import get_ticket_dir, get_branch_dir
 
 
 @dataclass
 class BuildStatus:
-    """Represents the build status of a ticket."""
+    """Represents the build status of a branch."""
 
-    ticket_id: str
+    branch_name: str
     status: str  # "passing", "failing", "unknown"
     last_build: Optional[datetime] = None
     duration_seconds: int = 0
@@ -39,25 +39,33 @@ class BuildStatus:
             data["errors"] = []
         if "warnings" not in data:
             data["warnings"] = 0
+
+        # Support old format with 'ticket_id' field for backwards compatibility
+        if "ticket_id" in data and "branch_name" not in data:
+            data["branch_name"] = data.pop("ticket_id")
+        elif "ticket_id" in data and "branch_name" in data:
+            # Both exist, remove 'ticket_id' to avoid duplicate argument
+            data.pop("ticket_id", None)
+
         return cls(**data)
 
 
-def get_build_status_path(ticket_id: str) -> Path:
-    """Get the path to the build status file for a ticket."""
-    return get_ticket_dir(ticket_id) / "build-status.json"
+def get_build_status_path(branch_name: str) -> Path:
+    """Get the path to the build status file for a branch."""
+    return get_branch_dir(branch_name) / "build-status.json"
 
 
-def read_build_status(ticket_id: str) -> Optional[BuildStatus]:
+def read_build_status(branch_name: str) -> Optional[BuildStatus]:
     """
     Read build status from file.
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
 
     Returns:
         BuildStatus if file exists and is valid, None otherwise
     """
-    status_file = get_build_status_path(ticket_id)
+    status_file = get_build_status_path(branch_name)
 
     if not status_file.exists():
         return None
@@ -71,7 +79,7 @@ def read_build_status(ticket_id: str) -> Optional[BuildStatus]:
     except Exception as e:
         from ccc.utils import print_warning
 
-        print_warning(f"Error reading build status for {ticket_id}: {e}")
+        print_warning(f"Error reading build status for {branch_name}: {e}")
         return None
 
 
@@ -86,7 +94,7 @@ def write_build_status(status: BuildStatus) -> bool:
         True if successful, False otherwise
     """
     try:
-        status_file = get_build_status_path(status.ticket_id)
+        status_file = get_build_status_path(status.branch_name)
 
         # Ensure directory exists
         status_file.parent.mkdir(parents=True, exist_ok=True)
@@ -107,22 +115,22 @@ def write_build_status(status: BuildStatus) -> bool:
         return False
 
 
-def init_build_status(ticket_id: str) -> None:
+def init_build_status(branch_name: str) -> None:
     """
-    Initialize a build status file for a new ticket.
+    Initialize a build status file for a new branch.
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
     """
     status = BuildStatus(
-        ticket_id=ticket_id,
+        branch_name=branch_name,
         status="unknown",
     )
     write_build_status(status)
 
 
 def update_build_status(
-    ticket_id: str,
+    branch_name: str,
     status: str,
     duration: Optional[int] = None,
     errors: Optional[List[str]] = None,
@@ -132,7 +140,7 @@ def update_build_status(
     Update build status (helper function for CLI).
 
     Args:
-        ticket_id: The ticket ID
+        branch_name: The branch name
         status: Build status ("passing" or "failing")
         duration: Build duration in seconds
         errors: List of error messages
@@ -142,9 +150,9 @@ def update_build_status(
         True if successful, False otherwise
     """
     # Read existing status or create new
-    build_status = read_build_status(ticket_id)
+    build_status = read_build_status(branch_name)
     if build_status is None:
-        build_status = BuildStatus(ticket_id=ticket_id, status=status)
+        build_status = BuildStatus(branch_name=branch_name, status=status)
     else:
         build_status.status = status
 

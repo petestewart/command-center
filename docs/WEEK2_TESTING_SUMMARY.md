@@ -11,6 +11,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
 **Location:** `~/.ccc-control/<ticket-id>/test-status.json`
 
 **Format:**
+
 ```json
 {
   "ticket_id": "TEST-123",
@@ -43,6 +44,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
 **Supported Frameworks:**
 
 #### Jest (JavaScript/TypeScript)
+
 - **Pattern:** `Tests: 2 failed, 47 passed, 1 skipped, 50 total`
 - **Test Result:** ✓ PASS
   - Total: 50
@@ -51,6 +53,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
   - Skipped: 1
 
 #### pytest (Python)
+
 - **Pattern:** `47 passed, 2 failed, 1 skipped in 12.34s`
 - **Test Result:** ✓ PASS
   - Total: 50
@@ -60,6 +63,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
 - **Note:** Fixed regex pattern to properly match pytest output
 
 #### Go test
+
 - **Pattern:** `--- PASS: TestName` and `--- FAIL: TestName`
 - **Test Result:** ✓ PASS
   - Total: 6
@@ -77,6 +81,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
 **Implementation:** `ccc/cli.py` - test command group
 
 #### `cc test update`
+
 ```bash
 ccc test update <ticket-id> --status <passing|failing> \\
   --total <n> --passed <n> --failed <n> --skipped <n> \\
@@ -84,26 +89,31 @@ ccc test update <ticket-id> --status <passing|failing> \\
 ```
 
 **Example:**
+
 ```bash
 ccc test update TEST-123 --status failing --total 50 --passed 47 --failed 2 --skipped 1 --duration 12
 ```
 
 #### `cc test parse`
+
 ```bash
 ccc test parse <ticket-id> <output-file> [--framework <jest|pytest|go|auto>] [--duration <seconds>]
 ```
 
 **Example:**
+
 ```bash
 ccc test parse TEST-123 /tmp/test-output.txt --framework jest --duration 12
 ```
 
 #### `cc test show`
+
 ```bash
 ccc test show <ticket-id>
 ```
 
 **Output displays:**
+
 - Test status (passing/failing)
 - Pass/fail/skip counts and percentages
 - Last run time and duration
@@ -116,6 +126,7 @@ ccc test show <ticket-id>
 **Location:** `scripts/cc-test` and `scripts/cc-build`
 
 **cc-test Script Features:**
+
 - Captures test command output
 - Records test start/end times
 - Automatically parses output with `ccc test parse`
@@ -123,11 +134,13 @@ ccc test show <ticket-id>
 - Falls back to basic status update if parsing fails
 
 **Usage:**
+
 ```bash
 cc-test <ticket-id> <test-command> [args...]
 ```
 
 **Examples:**
+
 ```bash
 cc-test IN-413 npm test
 cc-test IN-413 pytest
@@ -143,6 +156,7 @@ cc-test IN-413 go test ./...
 **Implementation:** `ccc/tui.py` - TestStatusPanel class
 
 **Features:**
+
 - ✅ Test Status panel in ticket detail view
 - ✅ Color coding:
   - Green: All tests passing (100%)
@@ -156,6 +170,7 @@ cc-test IN-413 go test ./...
 - ✅ Updates automatically with configurable refresh interval
 
 **Example Display:**
+
 ```
 ┌─ Test Status ──────────────────────────────────┐
 │ ⚠ 47/50 passing (94%)                         │
@@ -175,6 +190,7 @@ cc-test IN-413 go test ./...
 **Implementation:** `ccc/tui.py` - TicketDetailView class
 
 **Layout includes all status panels:**
+
 1. Agent Status Panel
 2. Git Status Panel
 3. Build Status Panel
@@ -189,6 +205,7 @@ All panels update automatically based on configured poll intervals.
 **Implementation:** `ccc/config.py` - Config dataclass
 
 **Configuration Options:**
+
 ```yaml
 # ~/.ccc-control/config.yaml
 status_poll_interval: 3
@@ -198,6 +215,7 @@ test_status_cache_seconds: 30
 ```
 
 **Default Values:**
+
 - status_poll_interval: 3 seconds
 - git_status_cache_seconds: 10 seconds
 - build_status_cache_seconds: 30 seconds
@@ -212,6 +230,7 @@ test_status_cache_seconds: 30
 **Keyboard Shortcut:** Press `r` key in TUI
 
 **Behavior:**
+
 - Reloads all ticket data
 - Forces refresh of all status panels
 - Shows notification: "Refreshed all data"
@@ -221,11 +240,13 @@ test_status_cache_seconds: 30
 ## Fixes Applied
 
 ### 1. pytest Parser
+
 **Issue:** Regex pattern made all groups optional, causing it to match empty strings
 **Fix:** Updated pattern to require at least one number with passed/failed/skipped
 **Result:** ✓ Parser now correctly extracts all test counts
 
 ### 2. Go Test Parser
+
 **Issue:** Looking for `^PASS` and `^FAIL` which matches summary lines, not individual tests
 **Fix:** Updated to match `^--- PASS:` and `^--- FAIL:` for individual test results
 **Result:** ✓ Parser now correctly counts individual test results
@@ -235,12 +256,14 @@ test_status_cache_seconds: 30
 ## Testing Results
 
 ### Parser Tests
+
 - ✅ Jest parser: Correctly parsed 50 total, 47 passed, 2 failed, 1 skipped
 - ✅ pytest parser: Correctly parsed 50 total, 47 passed, 2 failed, 1 skipped
 - ✅ Go parser: Correctly parsed 6 total, 4 passed, 2 failed
 - ✅ Auto-detection: Works for Jest and pytest
 
 ### Integration Tests
+
 - ✅ Test status file creation
 - ✅ Test status JSON format validation
 - ✅ Update and read operations
@@ -248,6 +271,7 @@ test_status_cache_seconds: 30
 - ✅ CLI commands (update, parse, show)
 
 ### File Verification
+
 - ✅ Test status JSON files created in correct location
 - ✅ All required fields present
 - ✅ Timestamps in ISO format
@@ -273,11 +297,13 @@ According to `docs/PHASE_2.md`, all Week 2 deliverables are complete:
 ## Installation and Usage
 
 ### 1. Install Command Center
+
 ```bash
 pip install -e .
 ```
 
 ### 2. Install Wrapper Scripts
+
 ```bash
 ccc config  # Initializes config and installs scripts to ~/.ccc-control/bin
 export PATH="$HOME/.ccc-control/bin:$PATH"
@@ -286,6 +312,7 @@ export PATH="$HOME/.ccc-control/bin:$PATH"
 ### 3. Use Test Tracking
 
 **Option A: Manual CLI**
+
 ```bash
 # Run tests and save output
 npm test > test-output.txt 2>&1
@@ -294,18 +321,21 @@ ccc test parse MY-TICKET test-output.txt --framework jest
 ```
 
 **Option B: Wrapper Script**
+
 ```bash
 # Automatically tracks tests
 cc-test MY-TICKET npm test
 ```
 
 **Option C: Direct Update**
+
 ```bash
 # Manually specify counts
 ccc test update MY-TICKET --status passing --total 50 --passed 50 --failed 0
 ```
 
 ### 4. View in TUI
+
 ```bash
 ccc tui
 # Press 'r' to manually refresh
@@ -319,6 +349,7 @@ ccc tui
 Week 2 is complete and ready for use. All functionality has been implemented and tested according to the Phase 2 specification.
 
 **Ready for:**
+
 - ✅ Committing changes
 - ✅ Creating pull request
 - ✅ User testing

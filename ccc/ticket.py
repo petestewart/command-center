@@ -8,21 +8,24 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from ccc.utils import get_cccc_home, get_tmux_session_name
+from ccc.utils import (
+    get_ccc_home,
+    get_tmux_session_name,
+    get_tmux_session_name_from_branch,
+    extract_display_id,
+)
 
 
 @dataclass
 class Ticket:
     """Represents a development ticket tracked by Command Center."""
 
-    # Unique ticket identifier (e.g., "IN-413")
-    id: str
+    # Git branch name - this is the primary unique identifier
+    # Examples: "feature/IN-413-add-api", "bugfix/BUG-42", "main"
+    branch: str
 
     # Human-readable title
     title: str
-
-    # Git branch name
-    branch: str
 
     # Path to git worktree
     worktree_path: str
@@ -38,6 +41,28 @@ class Ticket:
 
     # Last time the ticket was updated
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def display_id(self) -> Optional[str]:
+        """
+        Extract a display ID from the branch name.
+
+        This extracts ticket-like identifiers (e.g., "IN-413" from "feature/IN-413-add-api")
+        for display purposes in the UI.
+
+        Returns:
+            Extracted ticket ID if found, None otherwise
+        """
+        return extract_display_id(self.branch)
+
+    @property
+    def id(self) -> str:
+        """
+        Alias for branch to maintain some backwards compatibility.
+
+        DEPRECATED: Use .branch directly instead.
+        """
+        return self.branch
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert ticket to dictionary for YAML serialization."""
@@ -56,6 +81,14 @@ class Ticket:
         if isinstance(data.get("updated_at"), str):
             data["updated_at"] = datetime.fromisoformat(data["updated_at"])
 
+        # Support old format with 'id' field for backwards compatibility
+        # If 'id' exists but 'branch' doesn't, use 'id' as the branch
+        if "id" in data and "branch" not in data:
+            data["branch"] = data.pop("id")
+        elif "id" in data and "branch" in data:
+            # Both exist, remove 'id' to avoid duplicate argument
+            data.pop("id", None)
+
         return cls(**data)
 
     def update_timestamp(self):
@@ -67,7 +100,7 @@ class TicketRegistry:
     """Manages the registry of all tickets."""
 
     def __init__(self):
-        self.registry_path = get_cccc_home() / "tickets.yaml"
+        self.registry_path = get_ccc_home() / "tickets.yaml"
 
     def load(self) -> List[Ticket]:
         """Load all tickets from the registry."""
@@ -105,25 +138,25 @@ class TicketRegistry:
             print_error(f"Error saving tickets: {e}")
             raise
 
-    def get(self, ticket_id: str) -> Optional[Ticket]:
-        """Get a specific ticket by ID."""
+    def get(self, branch_name: str) -> Optional[Ticket]:
+        """Get a specific ticket by branch name."""
         tickets = self.load()
         for ticket in tickets:
-            if ticket.id == ticket_id:
+            if ticket.branch == branch_name:
                 return ticket
         return None
 
-    def exists(self, ticket_id: str) -> bool:
-        """Check if a ticket exists."""
-        return self.get(ticket_id) is not None
+    def exists(self, branch_name: str) -> bool:
+        """Check if a ticket exists for the given branch."""
+        return self.get(branch_name) is not None
 
     def add(self, ticket: Ticket) -> None:
         """Add a new ticket to the registry."""
         tickets = self.load()
 
         # Check for duplicates
-        if any(t.id == ticket.id for t in tickets):
-            raise ValueError(f"Ticket {ticket.id} already exists")
+        if any(t.branch == ticket.branch for t in tickets):
+            raise ValueError(f"Ticket for branch '{ticket.branch}' already exists")
 
         tickets.append(ticket)
         self.save(tickets)
@@ -135,21 +168,21 @@ class TicketRegistry:
         # Find and replace the ticket
         updated = False
         for i, t in enumerate(tickets):
-            if t.id == ticket.id:
+            if t.branch == ticket.branch:
                 ticket.update_timestamp()
                 tickets[i] = ticket
                 updated = True
                 break
 
         if not updated:
-            raise ValueError(f"Ticket {ticket.id} not found")
+            raise ValueError(f"Ticket for branch '{ticket.branch}' not found")
 
         self.save(tickets)
 
-    def delete(self, ticket_id: str) -> None:
-        """Remove a ticket from the registry."""
+    def delete(self, branch_name: str) -> None:
+        """Remove a ticket from the registry by branch name."""
         tickets = self.load()
-        tickets = [t for t in tickets if t.id != ticket_id]
+        tickets = [t for t in tickets if t.branch != branch_name]
         self.save(tickets)
 
     def list_all(self) -> List[Ticket]:
@@ -166,9 +199,8 @@ class TicketRegistry:
 
 
 def create_ticket(
-    ticket_id: str,
-    title: str,
     branch: str,
+    title: str,
     worktree_path: str,
     tmux_session: Optional[str] = None,
 ) -> Ticket:
@@ -176,9 +208,8 @@ def create_ticket(
     Create a new ticket instance.
 
     Args:
-        ticket_id: Unique ticket ID
+        branch: Git branch name (primary identifier)
         title: Ticket title
-        branch: Git branch name
         worktree_path: Path to worktree
         tmux_session: Tmux session name (optional, will be generated if not provided)
 
@@ -186,12 +217,11 @@ def create_ticket(
         New Ticket instance
     """
     if tmux_session is None:
-        tmux_session = get_tmux_session_name(ticket_id)
+        tmux_session = get_tmux_session_name_from_branch(branch)
 
     return Ticket(
-        id=ticket_id,
-        title=title,
         branch=branch,
+        title=title,
         worktree_path=str(worktree_path),
         tmux_session=tmux_session,
     )

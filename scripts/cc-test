@@ -2,31 +2,37 @@
 #
 # cc-test - Test wrapper script for Command Center
 #
-# Usage: cc-test <ticket-id> <test-command> [args...]
+# Usage: cc-test <test-command> [args...]
 #
-# Automatically tracks test status for a ticket by:
-# 1. Recording test start time
-# 2. Running the test command and capturing output
-# 3. Capturing exit code
-# 4. Parsing test output to extract pass/fail counts
-# 5. Updating test status via `ccc test parse`
-# 6. Preserving original exit code
+# Automatically tracks test status for the current branch by:
+# 1. Detecting current git branch
+# 2. Recording test start time
+# 3. Running the test command and capturing output
+# 4. Capturing exit code
+# 5. Parsing test output to extract pass/fail counts
+# 6. Updating test status via `ccc test parse`
+# 7. Preserving original exit code
 
 set -o pipefail
 
 # Check arguments
-if [ $# -lt 2 ]; then
-    echo "Usage: cc-test <ticket-id> <test-command> [args...]" >&2
+if [ $# -lt 1 ]; then
+    echo "Usage: cc-test <test-command> [args...]" >&2
     echo "" >&2
     echo "Examples:" >&2
-    echo "  cc-test IN-413 npm test" >&2
-    echo "  cc-test IN-413 pytest" >&2
-    echo "  cc-test IN-413 go test ./..." >&2
+    echo "  cc-test npm test" >&2
+    echo "  cc-test pytest" >&2
+    echo "  cc-test go test ./..." >&2
     exit 1
 fi
 
-TICKET_ID="$1"
-shift
+# Auto-detect current branch
+BRANCH_NAME=$(git branch --show-current 2>/dev/null)
+
+if [ -z "$BRANCH_NAME" ]; then
+    echo "Error: Not in a git repository or not on a branch" >&2
+    exit 1
+fi
 
 # Record start time
 START=$(date +%s)
@@ -54,10 +60,10 @@ else
 fi
 
 # Parse output and update test status
-ccc test parse "$TICKET_ID" "$TMPFILE" --duration "$DURATION" --status "$STATUS" 2>/dev/null || {
-    echo "Warning: Failed to parse test output for $TICKET_ID" >&2
+ccc test parse "$BRANCH_NAME" "$TMPFILE" --duration "$DURATION" --status "$STATUS" 2>/dev/null || {
+    echo "Warning: Failed to parse test output for branch '$BRANCH_NAME'" >&2
     # Fallback: just update with basic status
-    ccc test update "$TICKET_ID" --status "$STATUS" --duration "$DURATION" 2>/dev/null || true
+    ccc test update "$BRANCH_NAME" --status "$STATUS" --duration "$DURATION" 2>/dev/null || true
 }
 
 # Exit with original exit code

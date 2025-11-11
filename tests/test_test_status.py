@@ -294,7 +294,14 @@ class TestReadWriteTestStatus:
         """Test writing test status with error."""
         mock_get_path.side_effect = Exception("Write error")
 
-        status = TestStatus(ticket_id="TEST-001", status="passing", total=0, passed=0, failed=0, skipped=0)
+        status = TestStatus(
+            ticket_id="TEST-001",
+            status="passing",
+            total=0,
+            passed=0,
+            failed=0,
+            skipped=0,
+        )
         result = write_test_status(status)
 
         assert result is False

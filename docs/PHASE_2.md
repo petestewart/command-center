@@ -176,7 +176,7 @@ exit $EXIT_CODE
 Usage:
 
 ```bash
-$ cccc-build IN-413 npm run build
+$ ccc-build IN-413 npm run build
 ```
 
 **CLI commands:**
@@ -489,7 +489,7 @@ Need to add to documentation:
 
 1. **INTEGRATION_GUIDE.md** - How to integrate with build/test commands
 2. **STATUS_FILES.md** - All status file formats
-3. **WRAPPER_SCRIPTS.md** - Using cccc-build and cccc-test wrappers
+3. **WRAPPER_SCRIPTS.md** - Using ccc-build and ccc-test wrappers
 4. **CONFIGURATION.md** - All config options
 
 ---

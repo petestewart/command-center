@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from ccc.utils import (
-    get_cccc_home,
+    get_ccc_home,
     get_ticket_dir,
     validate_ticket_id,
     format_time_ago,
@@ -23,21 +23,23 @@ class TestPaths:
     """Tests for path utility functions."""
 
     @patch("pathlib.Path.home")
-    def test_get_cccc_home(self, mock_home):
+    def test_get_ccc_home(self, mock_home):
         """Test getting CCC home directory."""
         mock_home.return_value = Path("/home/testuser")
 
         with patch.object(Path, "mkdir") as mock_mkdir:
-            home = get_cccc_home()
+            home = get_ccc_home()
 
         assert home == Path("/home/testuser/.ccc-control")
         mock_mkdir.assert_called_once_with(exist_ok=True)
 
-    @patch("ccc.utils.get_cccc_home")
+    @patch("ccc.utils.get_ccc_home")
     def test_get_ticket_dir(self, mock_get_home):
         """Test getting ticket directory."""
         mock_home_path = MagicMock()
-        mock_home_path.__truediv__ = lambda self, x: Path(f"/home/user/.ccc-control/{x}")
+        mock_home_path.__truediv__ = lambda self, x: Path(
+            f"/home/user/.ccc-control/{x}"
+        )
         mock_get_home.return_value = mock_home_path
 
         with patch.object(Path, "mkdir"):

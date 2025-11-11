@@ -81,7 +81,7 @@ class TestConfig:
 class TestConfigPaths:
     """Tests for config path functions."""
 
-    @patch("ccc.config.get_cccc_home")
+    @patch("ccc.config.get_ccc_home")
     def test_get_config_path(self, mock_get_home):
         """Test getting config file path."""
         mock_get_home.return_value = Path("/home/user/.ccc-control")
@@ -234,7 +234,7 @@ class TestUpdateConfig:
 class TestInstallWrapperScripts:
     """Tests for installing wrapper scripts."""
 
-    @patch("ccc.config.get_cccc_home")
+    @patch("ccc.config.get_ccc_home")
     def test_install_wrapper_scripts_success(self, mock_get_home):
         """Test successfully installing wrapper scripts."""
         mock_get_home.return_value = Path("/home/user/.ccc-control")
@@ -245,9 +245,11 @@ class TestInstallWrapperScripts:
         # Function executes without error
         assert result in [True, False]
 
-    @patch("ccc.config.get_cccc_home")
+    @patch("ccc.config.get_ccc_home")
     @patch("ccc.config.Path")
-    def test_install_wrapper_scripts_no_scripts_dir(self, mock_path_class, mock_get_home):
+    def test_install_wrapper_scripts_no_scripts_dir(
+        self, mock_path_class, mock_get_home
+    ):
         """Test installing wrapper scripts when scripts directory doesn't exist."""
         mock_get_home.return_value = Path("/home/user/.ccc-control")
 
@@ -258,7 +260,7 @@ class TestInstallWrapperScripts:
         # Should return False when scripts not found
         assert result is False
 
-    @patch("ccc.config.get_cccc_home")
+    @patch("ccc.config.get_ccc_home")
     def test_install_wrapper_scripts_error(self, mock_get_home):
         """Test installing wrapper scripts with error."""
         mock_get_home.side_effect = Exception("Error")
@@ -305,7 +307,9 @@ class TestInitConfig:
     @patch("ccc.utils.console")
     @patch("ccc.config.save_config")
     @patch("ccc.config.install_wrapper_scripts")
-    def test_init_config_wrapper_scripts_failed(self, mock_install, mock_save, mock_console):
+    def test_init_config_wrapper_scripts_failed(
+        self, mock_install, mock_save, mock_console
+    ):
         """Test init config when wrapper scripts installation fails."""
         mock_console.input.side_effect = ["", "", ""]
         mock_install.return_value = False

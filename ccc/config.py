@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from ccc.utils import get_cccc_home, expand_path
+from ccc.utils import get_ccc_home, expand_path, sanitize_branch_name
 
 
 @dataclass
@@ -35,10 +35,15 @@ class Config:
     build_status_cache_seconds: int = 30
     test_status_cache_seconds: int = 30
 
-    def get_worktree_path(self, ticket_id: str) -> Path:
-        """Get the worktree path for a specific ticket."""
+    def get_worktree_path(self, branch_name: str) -> Path:
+        """
+        Get the worktree path for a specific branch.
+
+        The branch name is sanitized for filesystem compatibility (e.g., slashes replaced with underscores).
+        """
         base = expand_path(self.base_worktree_path)
-        return base / ticket_id
+        sanitized = sanitize_branch_name(branch_name)
+        return base / sanitized
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -47,7 +52,7 @@ class Config:
 
 def get_config_path() -> Path:
     """Get the path to the config file."""
-    return get_cccc_home() / "config.yaml"
+    return get_ccc_home() / "config.yaml"
 
 
 def load_config() -> Config:
@@ -148,7 +153,7 @@ def install_wrapper_scripts() -> bool:
 
     try:
         # Get the bin directory
-        bin_dir = get_cccc_home() / "bin"
+        bin_dir = get_ccc_home() / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
 
         # Find the scripts directory (relative to this module)
@@ -221,12 +226,18 @@ def init_config() -> Config:
     if install_wrapper_scripts():
         console.print("[green]✓[/green] Wrapper scripts installed!")
         console.print("\nAdd to your PATH to use wrapper scripts:")
-        console.print("  export PATH=\"$HOME/.ccc-control/bin:$PATH\"")
+        console.print('  export PATH="$HOME/.ccc-control/bin:$PATH"')
         console.print("\nWrapper scripts available:")
-        console.print("  • cc-build <ticket-id> <command>  - Track build status")
-        console.print("  • cc-test <ticket-id> <command>   - Track test status")
+        console.print(
+            "  • cc-build <command>  - Track build status (auto-detects branch)"
+        )
+        console.print(
+            "  • cc-test <command>   - Track test status (auto-detects branch)"
+        )
     else:
-        console.print("[yellow]⚠[/yellow] Wrapper scripts not installed (scripts directory not found)")
+        console.print(
+            "[yellow]⚠[/yellow] Wrapper scripts not installed (scripts directory not found)"
+        )
 
     console.print()
 
