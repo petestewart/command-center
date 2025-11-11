@@ -15,7 +15,11 @@ from ccc import __version__
 from ccc.config import load_config, init_config
 from ccc.ticket import Ticket, TicketRegistry, create_ticket
 from ccc.session import TmuxSessionManager, check_tmux_installed, get_tmux_version
-from ccc.status import init_status_file, read_agent_status, update_status as update_status_file
+from ccc.status import (
+    init_status_file,
+    read_agent_status,
+    update_status as update_status_file,
+)
 from ccc.build_status import (
     init_build_status,
     read_build_status,
@@ -66,11 +70,13 @@ def cli(ctx):
 
 
 @cli.command()
-@click.argument('branch_name')
-@click.argument('title', required=False, default='')
-@click.option('--worktree-path', '-w', help='Custom worktree path (overrides config)')
-@click.option('--base-repo', help='Base repository path for creating worktree')
-def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo: Optional[str]):
+@click.argument("branch_name")
+@click.argument("title", required=False, default="")
+@click.option("--worktree-path", "-w", help="Custom worktree path (overrides config)")
+@click.option("--base-repo", help="Base repository path for creating worktree")
+def create(
+    branch_name: str, title: str, worktree_path: Optional[str], base_repo: Optional[str]
+):
     """
     Create a new ticket with git worktree and tmux session using a branch name.
 
@@ -97,8 +103,8 @@ def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo
     # If title not provided, try to generate from branch name
     if not title:
         # Convert branch name to title (e.g., "feature/add-api" -> "Add api")
-        parts = branch_name.split('/')
-        title = parts[-1].replace('-', ' ').replace('_', ' ').title()
+        parts = branch_name.split("/")
+        title = parts[-1].replace("-", " ").replace("_", " ").title()
 
     # Determine worktree path
     if worktree_path:
@@ -120,15 +126,17 @@ def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo
         # Try to detect current git repo
         try:
             result = subprocess.run(
-                ['git', 'rev-parse', '--show-toplevel'],
+                ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
             repo_path = Path(result.stdout.strip())
         except subprocess.CalledProcessError:
             print_error("Not in a git repository and no base repository configured")
-            print_info("Either run this command from a git repository, or configure base_repo_path in ~/.cccc-control/config.yaml")
+            print_info(
+                "Either run this command from a git repository, or configure base_repo_path in ~/.ccc-control/config.yaml"
+            )
             sys.exit(1)
 
     # Extract display ID if available
@@ -148,10 +156,10 @@ def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo
 
         # Create worktree and checkout branch
         subprocess.run(
-            ['git', 'worktree', 'add', '-b', branch_name, str(wt_path)],
+            ["git", "worktree", "add", "-b", branch_name, str(wt_path)],
             cwd=str(repo_path),
             check=True,
-            capture_output=True
+            capture_output=True,
         )
 
         print_success(f"Created worktree at {wt_path}")
@@ -192,19 +200,26 @@ def create(branch_name: str, title: str, worktree_path: Optional[str], base_repo
         # Clean up
         print_info("Cleaning up...")
         session_mgr.kill_session(ticket.tmux_session)
-        subprocess.run(['git', 'worktree', 'remove', str(wt_path)], check=False)
+        subprocess.run(["git", "worktree", "remove", str(wt_path)], check=False)
         sys.exit(1)
 
     # Print next steps
     console.print("\n[bold blue]Next steps:[/bold blue]")
-    console.print(f"  • Attach to agent terminal: [cyan]ccc attach {branch_name} agent[/cyan]")
+    console.print(
+        f"  • Attach to agent terminal: [cyan]ccc attach {branch_name} agent[/cyan]"
+    )
     console.print(f"  • View all tickets: [cyan]ccc list[/cyan]")
     console.print(f"  • Open in editor: [cyan]cd {wt_path} && cursor .[/cyan]\n")
 
 
 @cli.command()
-@click.option('--status', '-s', type=click.Choice(['active', 'complete', 'blocked', 'all']), default='all',
-              help='Filter by status')
+@click.option(
+    "--status",
+    "-s",
+    type=click.Choice(["active", "complete", "blocked", "all"]),
+    default="all",
+    help="Filter by status",
+)
 def list(status: str):
     """
     List all tickets with their current status.
@@ -216,14 +231,14 @@ def list(status: str):
     """
     registry = TicketRegistry()
 
-    if status == 'all':
+    if status == "all":
         tickets = registry.list_all()
     else:
         tickets = registry.list_by_status(status)
 
     if not tickets:
         print_info("No tickets found")
-        if status != 'all':
+        if status != "all":
             print_info(f"Try 'ccc list' to see all tickets")
         return
 
@@ -238,11 +253,11 @@ def list(status: str):
     for ticket in tickets:
         # Get status symbol
         status_symbols = {
-            'active': '●',
-            'complete': '✓',
-            'blocked': '⚠',
+            "active": "●",
+            "complete": "✓",
+            "blocked": "⚠",
         }
-        symbol = status_symbols.get(ticket.status, '○')
+        symbol = status_symbols.get(ticket.status, "○")
 
         # Get display ID (extracted from branch name if available)
         display_id = ticket.display_id or "-"
@@ -250,7 +265,9 @@ def list(status: str):
         # Get agent status if available
         agent_status = read_agent_status(ticket.branch)
         if agent_status and agent_status.current_task:
-            status_text = f"{symbol} {agent_status.status}: {agent_status.current_task[:30]}"
+            status_text = (
+                f"{symbol} {agent_status.status}: {agent_status.current_task[:30]}"
+            )
         else:
             status_text = f"{symbol} {ticket.status}"
 
@@ -259,15 +276,15 @@ def list(status: str):
             ticket.branch[:30],
             ticket.title[:30],
             status_text,
-            format_time_ago(ticket.updated_at)
+            format_time_ago(ticket.updated_at),
         )
 
     console.print(table)
 
     # Print summary
-    active_count = len([t for t in tickets if t.status == 'active'])
-    complete_count = len([t for t in tickets if t.status == 'complete'])
-    blocked_count = len([t for t in tickets if t.status == 'blocked'])
+    active_count = len([t for t in tickets if t.status == "active"])
+    complete_count = len([t for t in tickets if t.status == "complete"])
+    blocked_count = len([t for t in tickets if t.status == "blocked"])
 
     console.print(f"\n{len(tickets)} tickets total ", end="")
     console.print(f"([green]{active_count} active[/green], ", end="")
@@ -276,9 +293,13 @@ def list(status: str):
 
 
 @cli.command()
-@click.argument('branch_name')
-@click.option('--keep-worktree', is_flag=True, help='Keep the git worktree (only remove from registry)')
-@click.option('--force', '-f', is_flag=True, help='Skip confirmation prompt')
+@click.argument("branch_name")
+@click.option(
+    "--keep-worktree",
+    is_flag=True,
+    help="Keep the git worktree (only remove from registry)",
+)
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
 def delete(branch_name: str, keep_worktree: bool, force: bool):
     """
     Delete a work item and clean up its resources.
@@ -301,13 +322,17 @@ def delete(branch_name: str, keep_worktree: bool, force: bool):
 
     # Confirm deletion
     if not force:
-        console.print(f"\n[bold yellow]About to delete work item for branch '{branch_name}':[/bold yellow]")
+        console.print(
+            f"\n[bold yellow]About to delete work item for branch '{branch_name}':[/bold yellow]"
+        )
         console.print(f"  Title: {ticket.title}")
         console.print(f"  Worktree: {ticket.worktree_path}")
         console.print(f"  Tmux session: {ticket.tmux_session}")
 
         if not keep_worktree:
-            console.print("\n[bold red]This will remove the worktree and all uncommitted changes![/bold red]")
+            console.print(
+                "\n[bold red]This will remove the worktree and all uncommitted changes![/bold red]"
+            )
 
         if not confirm("\nAre you sure you want to delete this ticket?"):
             print_info("Deletion cancelled")
@@ -323,9 +348,9 @@ def delete(branch_name: str, keep_worktree: bool, force: bool):
         print_info("Removing git worktree...")
         try:
             subprocess.run(
-                ['git', 'worktree', 'remove', ticket.worktree_path, '--force'],
+                ["git", "worktree", "remove", ticket.worktree_path, "--force"],
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             print_success("Removed git worktree")
         except subprocess.CalledProcessError as e:
@@ -341,8 +366,8 @@ def delete(branch_name: str, keep_worktree: bool, force: bool):
 
 
 @cli.command()
-@click.argument('branch_name')
-@click.argument('window', type=click.Choice(['agent', 'server', 'tests']))
+@click.argument("branch_name")
+@click.argument("window", type=click.Choice(["agent", "server", "tests"]))
 def attach(branch_name: str, window: str):
     """
     Attach to a tmux window for a work item.
@@ -376,15 +401,25 @@ def status():
     pass
 
 
-@status.command('update')
-@click.argument('branch_name')
-@click.option('--status', '-s', required=True,
-              type=click.Choice(['idle', 'working', 'complete', 'blocked', 'error']),
-              help='Agent status')
-@click.option('--task', '-t', help='Current task description')
-@click.option('--blocked', is_flag=True, help='Mark as blocked')
-@click.option('--question', '-q', help='Add a question')
-def status_update(branch_name: str, status: str, task: Optional[str], blocked: bool, question: Optional[str]):
+@status.command("update")
+@click.argument("branch_name")
+@click.option(
+    "--status",
+    "-s",
+    required=True,
+    type=click.Choice(["idle", "working", "complete", "blocked", "error"]),
+    help="Agent status",
+)
+@click.option("--task", "-t", help="Current task description")
+@click.option("--blocked", is_flag=True, help="Mark as blocked")
+@click.option("--question", "-q", help="Add a question")
+def status_update(
+    branch_name: str,
+    status: str,
+    task: Optional[str],
+    blocked: bool,
+    question: Optional[str],
+):
     """
     Update agent status for a work item.
 
@@ -413,8 +448,8 @@ def status_update(branch_name: str, status: str, task: Optional[str], blocked: b
         sys.exit(1)
 
 
-@status.command('show')
-@click.argument('branch_name')
+@status.command("show")
+@click.argument("branch_name")
 def status_show(branch_name: str):
     """
     Show agent status for a work item.
@@ -440,7 +475,9 @@ def status_show(branch_name: str):
 
     # Display status
     console.print(f"\n[bold]Agent Status: {branch_name}[/bold]\n")
-    console.print(f"Status: [{_get_status_color(agent_status.status)}]{agent_status.status}[/]")
+    console.print(
+        f"Status: [{_get_status_color(agent_status.status)}]{agent_status.status}[/]"
+    )
 
     if agent_status.current_task:
         console.print(f"Task: {agent_status.current_task}")
@@ -464,15 +501,21 @@ def build():
     pass
 
 
-@build.command('update')
-@click.argument('branch_name')
-@click.option('--status', '-s', required=True,
-              type=click.Choice(['passing', 'failing']),
-              help='Build status')
-@click.option('--duration', '-d', type=int, help='Build duration in seconds')
-@click.option('--warnings', '-w', type=int, default=0, help='Number of warnings')
-@click.option('--errors', '-e', multiple=True, help='Error messages')
-def build_update(branch_name: str, status: str, duration: Optional[int], warnings: int, errors: tuple):
+@build.command("update")
+@click.argument("branch_name")
+@click.option(
+    "--status",
+    "-s",
+    required=True,
+    type=click.Choice(["passing", "failing"]),
+    help="Build status",
+)
+@click.option("--duration", "-d", type=int, help="Build duration in seconds")
+@click.option("--warnings", "-w", type=int, default=0, help="Number of warnings")
+@click.option("--errors", "-e", multiple=True, help="Error messages")
+def build_update(
+    branch_name: str, status: str, duration: Optional[int], warnings: int, errors: tuple
+):
     """
     Update build status for a ticket.
 
@@ -500,8 +543,8 @@ def build_update(branch_name: str, status: str, duration: Optional[int], warning
         sys.exit(1)
 
 
-@build.command('show')
-@click.argument('branch_name')
+@build.command("show")
+@click.argument("branch_name")
 def build_show(branch_name: str):
     """
     Show build status for a ticket.
@@ -537,18 +580,29 @@ def test():
     pass
 
 
-@test.command('update')
-@click.argument('branch_name')
-@click.option('--status', '-s', required=True,
-              type=click.Choice(['passing', 'failing']),
-              help='Test status')
-@click.option('--duration', '-d', type=int, help='Test run duration in seconds')
-@click.option('--total', type=int, help='Total number of tests')
-@click.option('--passed', type=int, help='Number of passed tests')
-@click.option('--failed', type=int, help='Number of failed tests')
-@click.option('--skipped', type=int, help='Number of skipped tests')
-def test_update(branch_name: str, status: str, duration: Optional[int], total: Optional[int],
-                passed: Optional[int], failed: Optional[int], skipped: Optional[int]):
+@test.command("update")
+@click.argument("branch_name")
+@click.option(
+    "--status",
+    "-s",
+    required=True,
+    type=click.Choice(["passing", "failing"]),
+    help="Test status",
+)
+@click.option("--duration", "-d", type=int, help="Test run duration in seconds")
+@click.option("--total", type=int, help="Total number of tests")
+@click.option("--passed", type=int, help="Number of passed tests")
+@click.option("--failed", type=int, help="Number of failed tests")
+@click.option("--skipped", type=int, help="Number of skipped tests")
+def test_update(
+    branch_name: str,
+    status: str,
+    duration: Optional[int],
+    total: Optional[int],
+    passed: Optional[int],
+    failed: Optional[int],
+    skipped: Optional[int],
+):
     """
     Update test status for a ticket.
 
@@ -565,7 +619,9 @@ def test_update(branch_name: str, status: str, duration: Optional[int], total: O
         sys.exit(1)
 
     # Update test status
-    if update_test_status(branch_name, status, duration, total, passed, failed, skipped):
+    if update_test_status(
+        branch_name, status, duration, total, passed, failed, skipped
+    ):
         print_success(f"Updated test status for branch '{branch_name}'")
         print_info(f"Status: {status}")
         if total:
@@ -575,14 +631,27 @@ def test_update(branch_name: str, status: str, duration: Optional[int], total: O
         sys.exit(1)
 
 
-@test.command('parse')
-@click.argument('branch_name')
-@click.argument('output_file', type=click.Path(exists=True))
-@click.option('--framework', '-f', type=click.Choice(['auto', 'jest', 'pytest', 'go']),
-              default='auto', help='Test framework type')
-@click.option('--duration', '-d', type=int, help='Test run duration in seconds')
-@click.option('--status', '-s', type=click.Choice(['passing', 'failing']), help='Override status')
-def test_parse(branch_name: str, output_file: str, framework: str, duration: Optional[int], status: Optional[str]):
+@test.command("parse")
+@click.argument("branch_name")
+@click.argument("output_file", type=click.Path(exists=True))
+@click.option(
+    "--framework",
+    "-f",
+    type=click.Choice(["auto", "jest", "pytest", "go"]),
+    default="auto",
+    help="Test framework type",
+)
+@click.option("--duration", "-d", type=int, help="Test run duration in seconds")
+@click.option(
+    "--status", "-s", type=click.Choice(["passing", "failing"]), help="Override status"
+)
+def test_parse(
+    branch_name: str,
+    output_file: str,
+    framework: str,
+    duration: Optional[int],
+    status: Optional[str],
+):
     """
     Parse test output file and update status.
 
@@ -600,7 +669,7 @@ def test_parse(branch_name: str, output_file: str, framework: str, duration: Opt
 
     # Read output file
     try:
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             output = f.read()
     except Exception as e:
         print_error(f"Failed to read output file: {e}")
@@ -611,30 +680,32 @@ def test_parse(branch_name: str, output_file: str, framework: str, duration: Opt
 
     # Determine status
     if status is None:
-        status = "passing" if parsed.get('failed', 0) == 0 else "failing"
+        status = "passing" if parsed.get("failed", 0) == 0 else "failing"
 
     # Update test status
     if update_test_status(
         branch_name,
         status,
         duration,
-        parsed.get('total'),
-        parsed.get('passed'),
-        parsed.get('failed'),
-        parsed.get('skipped'),
+        parsed.get("total"),
+        parsed.get("passed"),
+        parsed.get("failed"),
+        parsed.get("skipped"),
     ):
         print_success(f"Updated test status for branch '{branch_name}'")
-        print_info(f"Parsed {parsed.get('total', 0)} tests: "
-                  f"{parsed.get('passed', 0)} passed, "
-                  f"{parsed.get('failed', 0)} failed, "
-                  f"{parsed.get('skipped', 0)} skipped")
+        print_info(
+            f"Parsed {parsed.get('total', 0)} tests: "
+            f"{parsed.get('passed', 0)} passed, "
+            f"{parsed.get('failed', 0)} failed, "
+            f"{parsed.get('skipped', 0)} skipped"
+        )
     else:
         print_error("Failed to update test status")
         sys.exit(1)
 
 
-@test.command('show')
-@click.argument('branch_name')
+@test.command("show")
+@click.argument("branch_name")
 def test_show(branch_name: str):
     """
     Show test status for a ticket.
@@ -704,13 +775,13 @@ def tui():
 def _get_status_color(status: str) -> str:
     """Get color for status display."""
     colors = {
-        'working': 'green',
-        'complete': 'blue',
-        'blocked': 'yellow',
-        'error': 'red',
-        'idle': 'white',
+        "working": "green",
+        "complete": "blue",
+        "blocked": "yellow",
+        "error": "red",
+        "idle": "white",
     }
-    return colors.get(status, 'white')
+    return colors.get(status, "white")
 
 
 def main():
@@ -723,9 +794,10 @@ def main():
     except Exception as e:
         print_error(f"Unexpected error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

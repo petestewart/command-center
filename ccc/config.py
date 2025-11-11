@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from ccc.utils import get_cccc_home, expand_path, sanitize_branch_name
+from ccc.utils import get_ccc_home, expand_path, sanitize_branch_name
 
 
 @dataclass
@@ -52,12 +52,12 @@ class Config:
 
 def get_config_path() -> Path:
     """Get the path to the config file."""
-    return get_cccc_home() / "config.yaml"
+    return get_ccc_home() / "config.yaml"
 
 
 def load_config() -> Config:
     """
-    Load configuration from ~/.cccc-control/config.yaml.
+    Load configuration from ~/.ccc-control/config.yaml.
     Creates default config if it doesn't exist.
     """
     config_path = get_config_path()
@@ -108,7 +108,7 @@ def load_config() -> Config:
 
 
 def save_config(config: Config) -> None:
-    """Save configuration to ~/.cccc-control/config.yaml."""
+    """Save configuration to ~/.ccc-control/config.yaml."""
     config_path = get_config_path()
 
     # Ensure parent directory exists
@@ -153,7 +153,7 @@ def install_wrapper_scripts() -> bool:
 
     try:
         # Get the bin directory
-        bin_dir = get_cccc_home() / "bin"
+        bin_dir = get_ccc_home() / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
 
         # Find the scripts directory (relative to this module)
@@ -226,12 +226,18 @@ def init_config() -> Config:
     if install_wrapper_scripts():
         console.print("[green]✓[/green] Wrapper scripts installed!")
         console.print("\nAdd to your PATH to use wrapper scripts:")
-        console.print("  export PATH=\"$HOME/.ccc-control/bin:$PATH\"")
+        console.print('  export PATH="$HOME/.ccc-control/bin:$PATH"')
         console.print("\nWrapper scripts available:")
-        console.print("  • cc-build <command>  - Track build status (auto-detects branch)")
-        console.print("  • cc-test <command>   - Track test status (auto-detects branch)")
+        console.print(
+            "  • cc-build <command>  - Track build status (auto-detects branch)"
+        )
+        console.print(
+            "  • cc-test <command>   - Track test status (auto-detects branch)"
+        )
     else:
-        console.print("[yellow]⚠[/yellow] Wrapper scripts not installed (scripts directory not found)")
+        console.print(
+            "[yellow]⚠[/yellow] Wrapper scripts not installed (scripts directory not found)"
+        )
 
     console.print()
 

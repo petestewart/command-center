@@ -16,12 +16,12 @@ from rich.text import Text
 console = Console()
 
 
-def get_cccc_home() -> Path:
+def get_ccc_home() -> Path:
     """
-    Get the Command Center home directory (~/.cccc-control).
+    Get the Command Center home directory (~/.ccc-control).
     Creates it if it doesn't exist.
     """
-    ccc_home = Path.home() / ".cccc-control"
+    ccc_home = Path.home() / ".ccc-control"
     ccc_home.mkdir(exist_ok=True)
     return ccc_home
 
@@ -33,7 +33,7 @@ def get_ticket_dir(ticket_id: str) -> Path:
 
     DEPRECATED: Use get_branch_dir() instead for branch-based system.
     """
-    ticket_dir = get_cccc_home() / ticket_id
+    ticket_dir = get_ccc_home() / ticket_id
     ticket_dir.mkdir(exist_ok=True)
     return ticket_dir
 
@@ -50,9 +50,9 @@ def sanitize_branch_name(branch_name: str) -> str:
         - "bugfix/BUG-42/hotfix" -> "bugfix__BUG-42__hotfix"
     """
     # Replace forward slashes with double underscores
-    sanitized = branch_name.replace('/', '__')
+    sanitized = branch_name.replace("/", "__")
     # Replace any other problematic characters
-    sanitized = re.sub(r'[<>:"|?*\\]', '_', sanitized)
+    sanitized = re.sub(r'[<>:"|?*\\]', "_", sanitized)
     return sanitized
 
 
@@ -64,7 +64,7 @@ def get_branch_dir(branch_name: str) -> Path:
     Branch names are sanitized for filesystem compatibility.
     """
     sanitized = sanitize_branch_name(branch_name)
-    branch_dir = get_cccc_home() / sanitized
+    branch_dir = get_ccc_home() / sanitized
     branch_dir.mkdir(exist_ok=True)
     return branch_dir
 
@@ -84,7 +84,7 @@ def extract_display_id(branch_name: str) -> Optional[str]:
     Returns:
         The extracted ticket ID if found, None otherwise
     """
-    pattern = r'[A-Z]+-\d+'
+    pattern = r"[A-Z]+-\d+"
     match = re.search(pattern, branch_name)
     return match.group(0) if match else None
 
@@ -97,7 +97,7 @@ def validate_ticket_id(ticket_id: str) -> bool:
     DEPRECATED: This validation is no longer needed for branch-based system.
     Branch names can be any valid git branch name.
     """
-    pattern = r'^[A-Z]+-\d+$'
+    pattern = r"^[A-Z]+-\d+$"
     return bool(re.match(pattern, ticket_id))
 
 
@@ -181,7 +181,7 @@ def confirm(message: str, default: bool = False) -> bool:
     if not response:
         return default
 
-    return response in ['y', 'yes']
+    return response in ["y", "yes"]
 
 
 def get_tmux_session_name_from_branch(branch_name: str, prefix: str = "ccc-") -> str:
@@ -195,9 +195,9 @@ def get_tmux_session_name_from_branch(branch_name: str, prefix: str = "ccc-") ->
         - "bugfix/BUG-42" -> "ccc-bugfix-BUG-42"
     """
     # Replace slashes with hyphens for tmux compatibility
-    sanitized = branch_name.replace('/', '-')
+    sanitized = branch_name.replace("/", "-")
     # Remove any other problematic characters
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', sanitized)
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "-", sanitized)
     return f"{prefix}{sanitized}"
 
 
@@ -227,11 +227,11 @@ def get_branch_name(ticket_id: str, title: Optional[str] = None) -> str:
 
     if title:
         # Convert title to lowercase, replace spaces with hyphens, remove special chars
-        title_slug = re.sub(r'[^a-z0-9-]', '', title.lower().replace(' ', '-'))
+        title_slug = re.sub(r"[^a-z0-9-]", "", title.lower().replace(" ", "-"))
         # Remove multiple consecutive hyphens
-        title_slug = re.sub(r'-+', '-', title_slug)
+        title_slug = re.sub(r"-+", "-", title_slug)
         # Remove leading/trailing hyphens
-        title_slug = title_slug.strip('-')
+        title_slug = title_slug.strip("-")
         if title_slug:
             branch_parts.append(title_slug)
 
@@ -244,4 +244,4 @@ def truncate_string(text: str, max_length: int, suffix: str = "...") -> str:
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length - len(suffix)] + suffix
+    return text[: max_length - len(suffix)] + suffix

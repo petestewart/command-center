@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from ccc.utils import get_cccc_home, get_tmux_session_name, get_tmux_session_name_from_branch, extract_display_id
+from ccc.utils import (
+    get_ccc_home,
+    get_tmux_session_name,
+    get_tmux_session_name_from_branch,
+    extract_display_id,
+)
 
 
 @dataclass
@@ -95,7 +100,7 @@ class TicketRegistry:
     """Manages the registry of all tickets."""
 
     def __init__(self):
-        self.registry_path = get_cccc_home() / "tickets.yaml"
+        self.registry_path = get_ccc_home() / "tickets.yaml"
 
     def load(self) -> List[Ticket]:
         """Load all tickets from the registry."""
