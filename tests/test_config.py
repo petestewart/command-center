@@ -84,11 +84,11 @@ class TestConfigPaths:
     @patch("ccc.config.get_cccc_home")
     def test_get_config_path(self, mock_get_home):
         """Test getting config file path."""
-        mock_get_home.return_value = Path("/home/user/.cccc-control")
+        mock_get_home.return_value = Path("/home/user/.ccc-control")
 
         path = get_config_path()
 
-        assert path == Path("/home/user/.cccc-control/config.yaml")
+        assert path == Path("/home/user/.ccc-control/config.yaml")
 
 
 class TestLoadSaveConfig:
@@ -237,7 +237,7 @@ class TestInstallWrapperScripts:
     @patch("ccc.config.get_cccc_home")
     def test_install_wrapper_scripts_success(self, mock_get_home):
         """Test successfully installing wrapper scripts."""
-        mock_get_home.return_value = Path("/home/user/.cccc-control")
+        mock_get_home.return_value = Path("/home/user/.ccc-control")
 
         # Just test that it doesn't raise an exception
         result = install_wrapper_scripts()
@@ -249,7 +249,7 @@ class TestInstallWrapperScripts:
     @patch("ccc.config.Path")
     def test_install_wrapper_scripts_no_scripts_dir(self, mock_path_class, mock_get_home):
         """Test installing wrapper scripts when scripts directory doesn't exist."""
-        mock_get_home.return_value = Path("/home/user/.cccc-control")
+        mock_get_home.return_value = Path("/home/user/.ccc-control")
 
         # Setup mock to simulate scripts directory not existing
         with patch("pathlib.Path.exists", return_value=False):

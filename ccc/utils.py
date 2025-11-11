@@ -18,10 +18,10 @@ console = Console()
 
 def get_cccc_home() -> Path:
     """
-    Get the Command Center home directory (~/.cccc-control).
+    Get the Command Center home directory (~/.ccc-control).
     Creates it if it doesn't exist.
     """
-    ccc_home = Path.home() / ".cccc-control"
+    ccc_home = Path.home() / ".ccc-control"
     ccc_home.mkdir(exist_ok=True)
     return ccc_home
 

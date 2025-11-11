@@ -8,7 +8,7 @@ Week 2 of Phase 2 has been successfully implemented and tested. All components a
 
 ### 1. Test Status File Format ✅
 
-**Location:** `~/.cccc-control/<ticket-id>/test-status.json`
+**Location:** `~/.ccc-control/<ticket-id>/test-status.json`
 
 **Format:**
 ```json
@@ -190,7 +190,7 @@ All panels update automatically based on configured poll intervals.
 
 **Configuration Options:**
 ```yaml
-# ~/.cccc-control/config.yaml
+# ~/.ccc-control/config.yaml
 status_poll_interval: 3
 git_status_cache_seconds: 10
 build_status_cache_seconds: 30
@@ -279,8 +279,8 @@ pip install -e .
 
 ### 2. Install Wrapper Scripts
 ```bash
-ccc config  # Initializes config and installs scripts to ~/.cccc-control/bin
-export PATH="$HOME/.cccc-control/bin:$PATH"
+ccc config  # Initializes config and installs scripts to ~/.ccc-control/bin
+export PATH="$HOME/.ccc-control/bin:$PATH"
 ```
 
 ### 3. Use Test Tracking
