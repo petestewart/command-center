@@ -11,8 +11,8 @@ from datetime import datetime
 import logging
 
 from ccc.config import Config, load_config
-from ccc.build_status import BuildStatus, save_build_status
-from ccc.test_status import TestStatus, save_test_status
+from ccc.build_status import BuildStatus, write_build_status
+from ccc.test_status import TestStatus, write_test_status
 from ccc.utils import get_branch_dir, sanitize_branch_name
 
 
@@ -173,19 +173,16 @@ def run_build(
 
         # Save build status
         status = BuildStatus(
-            status="success" if success else "failed",
-            last_run=datetime.now(),
-            duration_seconds=duration,
-            exit_code=returncode,
-            output="\n".join(output[-50:]) if output else "",  # Keep last 50 lines
-            error_count=len([line for line in output if "error" in line.lower()]),
-            warning_count=len([line for line in output if "warning" in line.lower()]),
+            branch_name=branch_name,
+            status="passing" if success else "failing",
+            last_build=datetime.now(),
+            duration_seconds=int(duration) if duration else 0,
+            errors=[line for line in output if "error" in line.lower()][:10],  # Keep first 10 errors
+            warnings=len([line for line in output if "warning" in line.lower()]),
         )
 
         try:
-            sanitized_branch = sanitize_branch_name(branch_name)
-            branch_dir = get_branch_dir(sanitized_branch)
-            save_build_status(status, branch_dir)
+            write_build_status(status)
         except Exception as e:
             logger.error(f"Failed to save build status: {e}")
 
@@ -233,7 +230,7 @@ def run_tests(
         # This is a simple parser - could be enhanced for specific test frameworks
         passed = 0
         failed = 0
-        failures = []
+        skipped = 0
 
         for line in output:
             line_lower = line.lower()
@@ -248,24 +245,26 @@ def run_tests(
                 match = re.search(r'(\d+)\s+failed', line_lower)
                 if match:
                     failed = int(match.group(1))
-                # Collect failure messages
-                if "test" in line_lower or "spec" in line_lower:
-                    failures.append(line.strip())
+            if "skipped" in line_lower:
+                match = re.search(r'(\d+)\s+skipped', line_lower)
+                if match:
+                    skipped = int(match.group(1))
 
         # Save test status
         status = TestStatus(
-            status="passed" if success else "failed",
+            branch_name=branch_name,
+            status="passing" if success else "failing",
             last_run=datetime.now(),
-            duration_seconds=duration,
-            tests_passed=passed,
-            tests_failed=failed,
-            failures=failures[:10] if failures else [],  # Keep first 10 failures
+            duration_seconds=int(duration) if duration else 0,
+            total=passed + failed + skipped,
+            passed=passed,
+            failed=failed,
+            skipped=skipped,
+            failures=[],  # Would need more sophisticated parsing for actual failures
         )
 
         try:
-            sanitized_branch = sanitize_branch_name(branch_name)
-            branch_dir = get_branch_dir(sanitized_branch)
-            save_test_status(status, branch_dir)
+            write_test_status(status)
         except Exception as e:
             logger.error(f"Failed to save test status: {e}")
 

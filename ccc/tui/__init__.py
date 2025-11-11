@@ -20,6 +20,8 @@ from ccc.tui.widgets import (
     StreamingOutput,
 )
 
+from ccc.tui.app import run_tui
+
 __all__ = [
     "BaseDialog",
     "ConfirmDialog",
@@ -33,4 +35,5 @@ __all__ = [
     "MultiLineInput",
     "LogViewer",
     "StreamingOutput",
+    "run_tui",
 ]
