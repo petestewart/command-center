@@ -28,8 +28,7 @@ class TmuxSessionManager:
     def session_exists(self, session_name: str) -> bool:
         """Check if a tmux session exists."""
         try:
-            self.server.has_session(session_name)
-            return True
+            return self.server.has_session(session_name)
         except Exception:
             return False
 
@@ -137,6 +136,11 @@ class TmuxSessionManager:
         try:
             if not self.session_exists(session_name):
                 print_error(f"Tmux session '{session_name}' does not exist")
+                from cc.utils import print_info
+                print_info("The session may have been killed or never created.")
+                print_info("You can recreate it by deleting and recreating the ticket:")
+                print_info(f"  cc delete {session_name.replace('cc-', '')} --keep-worktree")
+                print_info(f"  Then recreate the ticket with 'cc create'")
                 return False
 
             # Map window names to indices
