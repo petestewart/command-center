@@ -81,8 +81,8 @@ class FileCheckboxList(VerticalScroll):
             yield Label("[dim]No changed files[/dim]")
         else:
             for file in self.files:
-                status_str = f"[{self._get_status_color(file.status)}]{file.display_status}[/]"
-                label = f"{status_str}: {file.path}"
+                # Just show the file path without the status label
+                label = file.path
                 # Create a valid ID by replacing invalid characters
                 safe_id = self._sanitize_id(file.path)
                 checkbox = Checkbox(label, value=file.staged, id=safe_id)
