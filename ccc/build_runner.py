@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from ccc.config import Config, load_config
@@ -175,7 +175,7 @@ def run_build(
         status = BuildStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_build=datetime.now(),
+            last_build=datetime.now(timezone.utc),
             duration_seconds=int(duration) if duration else 0,
             errors=[line for line in output if "error" in line.lower()][:10],  # Keep first 10 errors
             warnings=len([line for line in output if "warning" in line.lower()]),
@@ -254,7 +254,7 @@ def run_tests(
         status = TestStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_run=datetime.now(),
+            last_run=datetime.now(timezone.utc),
             duration_seconds=int(duration) if duration else 0,
             total=passed + failed + skipped,
             passed=passed,

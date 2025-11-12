@@ -27,7 +27,7 @@ class BaseDialog(ModalScreen):
         Binding("escape", "dismiss", "Close", show=False),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     BaseDialog {
         align: center middle;
     }
@@ -338,7 +338,7 @@ class CommitDialog(BaseDialog):
         Binding("ctrl+enter", "commit", "Commit", show=True),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     CommitDialog > Container {
         max-width: 100;
         max-height: 90%;
@@ -491,14 +491,15 @@ class LogDialog(BaseDialog):
         Binding("q", "dismiss", "Close", show=False),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     LogDialog > Container {
         max-width: 120;
         max-height: 90%;
     }
 
     LogDialog LogViewer {
-        height: 30;
+        max-height: 25;
+        height: auto;
     }
     """
 
@@ -562,7 +563,7 @@ class OutputDialog(BaseDialog):
         Binding("q", "close", "Close", show=False),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     OutputDialog > Container {
         max-width: 120;
         max-height: 90%;

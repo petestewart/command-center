@@ -13,9 +13,9 @@ from textual.reactive import reactive
 from ccc.git_operations import GitFile, GitCommit
 
 
-class FileCheckboxList(VerticalScroll):
+class FileCheckboxList(Static):
     """
-    A scrollable list of files with checkboxes for selection.
+    A simple list of files with text display and selection.
 
     Attributes:
         files: List of GitFile objects to display
@@ -24,26 +24,25 @@ class FileCheckboxList(VerticalScroll):
 
     BINDINGS = [
         Binding("space", "toggle_selected", "Toggle", show=False),
-        Binding("a", "select_all", "Select All", show=True),
-        Binding("n", "select_none", "Deselect All", show=True),
+        Binding("ctrl+a", "select_all", "Select All", show=True),
+        Binding("ctrl+n", "select_none", "Deselect All", show=True),
+        Binding("c", "toggle_all", "Toggle All", show=True),
+        Binding("up", "move_up", "Up", show=False),
+        Binding("down", "move_down", "Down", show=False),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     FileCheckboxList {
         width: 100%;
         height: auto;
         max-height: 15;
         border: solid $primary-lighten-1;
         padding: 0 1;
+        background: $surface;
     }
 
-    FileCheckboxList Checkbox {
-        width: 100%;
-        margin: 0;
-    }
-
-    FileCheckboxList .file-status {
-        color: $text-muted;
+    FileCheckboxList .file-selected {
+        color: $success;
     }
     """
 
@@ -62,7 +61,7 @@ class FileCheckboxList(VerticalScroll):
         classes: Optional[str] = None,
     ) -> None:
         """
-        Initialize the file checkbox list.
+        Initialize the file list.
 
         Args:
             files: List of GitFile objects to display
@@ -73,64 +72,75 @@ class FileCheckboxList(VerticalScroll):
         super().__init__(name=name, id=id, classes=classes)
         self.files = files
         self.selected_files: set[str] = set()
-        self._checkboxes: dict[str, Checkbox] = {}
+        self._focused_index = 0
+        self.can_focus = True
 
-    def compose(self) -> ComposeResult:
-        """Create child widgets."""
+        # Initialize selected files from staged status
+        for file in files:
+            if file.staged:
+                self.selected_files.add(file.path)
+
+    def render(self) -> str:
+        """Render the file list."""
         if not self.files:
-            yield Label("[dim]No changed files[/dim]")
-        else:
-            for file in self.files:
-                status_str = f"[{self._get_status_color(file.status)}]{file.display_status}[/]"
-                label = f"{status_str}: {file.path}"
-                checkbox = Checkbox(label, value=file.staged, id=f"file-{file.path}")
-                self._checkboxes[file.path] = checkbox
-                if file.staged:
-                    self.selected_files.add(file.path)
-                yield checkbox
+            return "[dim]No changed files[/dim]"
 
-    def _get_status_color(self, status: str) -> str:
-        """Get color for file status."""
-        color_map = {
-            "M": "yellow",
-            "A": "green",
-            "D": "red",
-            "R": "cyan",
-            "?": "blue",
-        }
-        return color_map.get(status, "white")
+        lines = []
+        for idx, file in enumerate(self.files):
+            checkbox_char = "✓" if file.path in self.selected_files else " "
+            is_focused = idx == self._focused_index
 
-    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        """Handle checkbox state changes."""
-        # Extract file path from checkbox ID
-        file_path = event.checkbox.id.replace("file-", "")
+            # Highlight focused line
+            if is_focused:
+                lines.append(f"[reverse][{checkbox_char}] {file.path}[/reverse]")
+            else:
+                class_str = " file-selected" if file.path in self.selected_files else ""
+                lines.append(f"[{checkbox_char}] {file.path}")
 
-        if event.value:
-            self.selected_files.add(file_path)
-        else:
-            self.selected_files.discard(file_path)
-
-        self.post_message(self.SelectionChanged(len(self.selected_files)))
+        return "\n".join(lines)
 
     def action_toggle_selected(self) -> None:
-        """Toggle the currently focused checkbox."""
-        focused = self.screen.focused
-        if isinstance(focused, Checkbox):
-            focused.toggle()
+        """Toggle selection of the currently focused file."""
+        if self._focused_index < len(self.files):
+            file_path = self.files[self._focused_index].path
+            if file_path in self.selected_files:
+                self.selected_files.discard(file_path)
+            else:
+                self.selected_files.add(file_path)
+            self.refresh()
+            self.post_message(self.SelectionChanged(len(self.selected_files)))
+
+    def action_move_up(self) -> None:
+        """Move focus up."""
+        if self._focused_index > 0:
+            self._focused_index -= 1
+            self.refresh()
+
+    def action_move_down(self) -> None:
+        """Move focus down."""
+        if self._focused_index < len(self.files) - 1:
+            self._focused_index += 1
+            self.refresh()
 
     def action_select_all(self) -> None:
         """Select all files."""
-        for file_path, checkbox in self._checkboxes.items():
-            checkbox.value = True
-            self.selected_files.add(file_path)
+        for file in self.files:
+            self.selected_files.add(file.path)
+        self.refresh()
         self.post_message(self.SelectionChanged(len(self.selected_files)))
 
     def action_select_none(self) -> None:
         """Deselect all files."""
-        for checkbox in self._checkboxes.values():
-            checkbox.value = False
         self.selected_files.clear()
+        self.refresh()
         self.post_message(self.SelectionChanged(0))
+
+    def action_toggle_all(self) -> None:
+        """Toggle between select all and select none."""
+        if len(self.selected_files) == len(self.files):
+            self.action_select_none()
+        else:
+            self.action_select_all()
 
     def get_selected_files(self) -> List[str]:
         """Get list of selected file paths."""
@@ -144,7 +154,7 @@ class MultiLineInput(Container):
     Uses Textual's TextArea widget with custom styling.
     """
 
-    DEFAULT_CSS = """
+    CSS = """
     MultiLineInput {
         width: 100%;
         height: auto;
@@ -242,7 +252,7 @@ class LogViewer(VerticalScroll):
         Binding("G", "scroll_bottom", "Bottom", show=False),
     ]
 
-    DEFAULT_CSS = """
+    CSS = """
     LogViewer {
         width: 100%;
         height: 100%;
@@ -344,7 +354,7 @@ class StreamingOutput(VerticalScroll):
     Used for build and test output display.
     """
 
-    DEFAULT_CSS = """
+    CSS = """
     StreamingOutput {
         width: 100%;
         height: 100%;

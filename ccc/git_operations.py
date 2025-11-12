@@ -229,6 +229,82 @@ def stage_and_commit(
         return GitOperationResult(success=False, message=error_msg, error=str(e))
 
 
+def _ensure_remote_configured(
+    worktree_path: Path, remote: str = "origin"
+) -> tuple[bool, Optional[str]]:
+    """
+    Check if a remote is configured. If not, try to set it up from the main repo.
+
+    Args:
+        worktree_path: Path to the git worktree
+        remote: Remote name to check/setup
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    try:
+        # Check if remote exists
+        returncode, stdout, stderr = run_git_command(
+            ["remote", "get-url", remote], worktree_path
+        )
+
+        if returncode == 0:
+            # Remote exists
+            return True, None
+
+        # Remote doesn't exist, try to get it from the main repo
+        # First, get the worktree's git directory to find the main repo reference
+        try:
+            git_dir = worktree_path / ".git"
+            if git_dir.is_file():
+                # Worktree uses a gitfile pointing to the main .git/worktrees directory
+                with open(git_dir) as f:
+                    gitfile_content = f.read().strip()
+                    # Format: gitdir: /path/to/.git/worktrees/name
+                    if gitfile_content.startswith("gitdir:"):
+                        worktree_git_path = Path(gitfile_content.split(":", 1)[1].strip())
+                        # Find main repo by going up to .git directory
+                        main_git_dir = worktree_git_path.parent.parent
+                        if (main_git_dir / "config").exists():
+                            # Get remote from main repo
+                            returncode, stdout, stderr = run_git_command(
+                                ["remote", "get-url", remote], main_git_dir.parent
+                            )
+                            if returncode == 0:
+                                remote_url = stdout.strip()
+                                # Add this remote to the worktree
+                                returncode, stdout, stderr = run_git_command(
+                                    ["remote", "add", remote, remote_url], worktree_path
+                                )
+                                if returncode == 0:
+                                    return True, None
+        except Exception:
+            pass
+
+        # Fallback: use git remote from current working directory or environment
+        try:
+            # Try to get the remote URL from the current repo
+            returncode, stdout, stderr = run_git_command(
+                ["remote", "get-url", remote], Path.cwd()
+            )
+            if returncode == 0:
+                remote_url = stdout.strip()
+                # Add this remote to the worktree
+                returncode, stdout, stderr = run_git_command(
+                    ["remote", "add", remote, remote_url], worktree_path
+                )
+                if returncode == 0:
+                    return True, None
+        except Exception:
+            pass
+
+        error_msg = f"Remote '{remote}' not configured and could not be auto-configured"
+        return False, error_msg
+
+    except Exception as e:
+        return False, str(e)
+
+
 def push_to_remote(
     worktree_path: Path, remote: str = "origin", branch: Optional[str] = None
 ) -> GitOperationResult:
@@ -244,6 +320,12 @@ def push_to_remote(
         GitOperationResult indicating success or failure
     """
     try:
+        # Ensure remote is configured
+        success, error = _ensure_remote_configured(worktree_path, remote)
+        if not success:
+            logger.error(error)
+            return GitOperationResult(success=False, message=error, error=error)
+
         # Get current branch if not specified
         if branch is None:
             returncode, stdout, stderr = run_git_command(
@@ -292,6 +374,12 @@ def pull_from_remote(
         GitOperationResult indicating success or failure
     """
     try:
+        # Ensure remote is configured
+        success, error = _ensure_remote_configured(worktree_path, remote)
+        if not success:
+            logger.error(error)
+            return GitOperationResult(success=False, message=error, error=error)
+
         # Get current branch if not specified
         if branch is None:
             returncode, stdout, stderr = run_git_command(
@@ -438,3 +526,75 @@ def get_commits_ahead(worktree_path: Path, remote: str = "origin") -> int:
         return 0
     except Exception:
         return 0
+
+
+def find_worktree_by_branch(branch_name: str) -> Optional[Path]:
+    """
+    Find the worktree path for a given branch.
+
+    First tries git worktree list, then falls back to searching the worktree base directory.
+
+    Args:
+        branch_name: Branch name to search for
+
+    Returns:
+        Path to the worktree if found, None otherwise
+    """
+    try:
+        # First try git worktree list --porcelain
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode == 0:
+            # Parse worktree list output
+            # Format: worktree <path>\nbranch <ref>
+            lines = result.stdout.strip().split("\n")
+            current_path = None
+
+            for line in lines:
+                if line.startswith("worktree "):
+                    current_path = line[len("worktree "):].strip()
+                elif line.startswith("branch ") and current_path:
+                    branch_ref = line[len("branch "):].strip()
+                    # Extract branch name from ref (e.g., "refs/heads/feature/TEST-999" -> "feature/TEST-999")
+                    if branch_ref.startswith("refs/heads/"):
+                        ref_branch = branch_ref[len("refs/heads/"):]
+                        if ref_branch == branch_name:
+                            return Path(current_path)
+
+        # Fallback: search the worktree base directory
+        # This handles orphaned worktrees or those not tracked by git worktree
+        from ccc.config import load_config
+        config = load_config()
+        base_worktree_path = Path(config.base_worktree_path).expanduser()
+
+        if base_worktree_path.exists():
+            for worktree_dir in base_worktree_path.iterdir():
+                if worktree_dir.is_dir():
+                    git_dir = worktree_dir / ".git"
+                    if git_dir.exists():
+                        try:
+                            # Check the branch in this worktree
+                            result = subprocess.run(
+                                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                                cwd=str(worktree_dir),
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                            )
+                            if result.returncode == 0:
+                                current_branch = result.stdout.strip()
+                                if current_branch == branch_name:
+                                    return worktree_dir
+                        except Exception:
+                            pass
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error finding worktree for branch '{branch_name}': {e}")
+        return None

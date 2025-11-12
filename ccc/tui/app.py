@@ -17,7 +17,7 @@ from rich.text import Text
 
 from ccc.ticket import Ticket, TicketRegistry
 from ccc.status import read_agent_status
-from ccc.git_status import get_git_status
+from ccc.git_status import get_git_status, clear_git_status_cache
 from ccc.build_status import read_build_status
 from ccc.test_status import read_test_status
 from ccc.config import load_config
@@ -36,6 +36,7 @@ from ccc.git_operations import (
     push_to_remote,
     pull_from_remote,
     get_commit_log,
+    find_worktree_by_branch,
 )
 from ccc.build_runner import run_build
 
@@ -130,10 +131,10 @@ class GitStatusPanel(Static):
             return
 
         config = load_config()
+        # Don't use cache when updating - we want fresh data
         git_status = get_git_status(
             self.worktree_path,
-            use_cache=True,
-            cache_seconds=config.git_status_cache_seconds
+            use_cache=False
         )
 
         if not git_status:
@@ -288,12 +289,19 @@ class TicketDetailView(VerticalScroll):
             header.update("No ticket selected")
             return
 
+        # Resolve the actual worktree path from git
+        # This handles cases where the stored path might be wrong
+        actual_worktree_path = find_worktree_by_branch(self.ticket.branch)
+        if not actual_worktree_path:
+            # Fall back to the stored path if not found
+            actual_worktree_path = Path(self.ticket.worktree_path)
+
         # Update header with branch name and extracted ID if available
         header = self.query_one("#ticket-header", Static)
         display_id = f"[{self.ticket.display_id}] " if self.ticket.display_id else ""
         header.update(f"[bold]{display_id}{self.ticket.branch}[/bold]\n"
                      f"Title: {self.ticket.title}\n"
-                     f"Worktree: {self.ticket.worktree_path}")
+                     f"Worktree: {actual_worktree_path}")
 
         # Update all status panels - use branch (which is the primary ID)
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -301,7 +309,7 @@ class TicketDetailView(VerticalScroll):
 
         git_panel = self.query_one("#git-panel", GitStatusPanel)
         git_panel.branch_name = self.ticket.branch
-        git_panel.worktree_path = self.ticket.worktree_path
+        git_panel.worktree_path = str(actual_worktree_path)
 
         build_panel = self.query_one("#build-panel", BuildStatusPanel)
         build_panel.branch_name = self.ticket.branch
@@ -311,7 +319,21 @@ class TicketDetailView(VerticalScroll):
 
     def refresh_status(self):
         """Manually refresh all status panels."""
-        self.update_panels()
+        if not self.ticket:
+            return
+
+        # Directly refresh each panel's content (don't rely on reactive watchers)
+        agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
+        agent_panel.update_content()
+
+        git_panel = self.query_one("#git-panel", GitStatusPanel)
+        git_panel.update_content()
+
+        build_panel = self.query_one("#build-panel", BuildStatusPanel)
+        build_panel.update_content()
+
+        test_panel = self.query_one("#test-panel", TestStatusPanel)
+        test_panel.update_content()
 
 
 class CommandCenterTUI(App):
@@ -442,11 +464,19 @@ class CommandCenterTUI(App):
 
     def update_detail_view(self):
         """Update the detail view with selected ticket."""
+        # Clear git status cache when switching tickets
+        if self.selected_ticket_id:
+            for ticket in self.tickets:
+                if ticket.branch == self.selected_ticket_id:
+                    clear_git_status_cache(ticket.worktree_path)
+                    break
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.branch_name = self.selected_ticket_id
 
     def action_refresh(self):
         """Manually refresh all data."""
+        # Clear git status cache to force fresh query
+        clear_git_status_cache()
         self.load_tickets()
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.refresh_status()
@@ -479,12 +509,21 @@ class CommandCenterTUI(App):
                 return ticket
         return None
 
+    def _resolve_worktree_path(self, ticket: Ticket) -> Path:
+        """Resolve the actual worktree path for a ticket from git."""
+        actual_path = find_worktree_by_branch(ticket.branch)
+        if actual_path:
+            return actual_path
+        return Path(ticket.worktree_path)
+
     def action_commit(self):
         """Show commit dialog for selected ticket."""
         ticket = self._get_selected_ticket()
         if not ticket:
             self.notify("No ticket selected", severity="warning")
             return
+
+        worktree_path = self._resolve_worktree_path(ticket)
 
         def on_commit_complete(result):
             """Handle commit completion."""
@@ -495,7 +534,7 @@ class CommandCenterTUI(App):
             # If result is None, user cancelled
 
         self.push_screen(
-            CommitDialog(Path(ticket.worktree_path), ticket.branch),
+            CommitDialog(worktree_path, ticket.branch),
             on_commit_complete
         )
 
@@ -506,6 +545,7 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
+        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
 
         def on_confirm(confirmed: bool):
@@ -521,7 +561,7 @@ class CommandCenterTUI(App):
 
             def do_push():
                 result = push_to_remote(
-                    Path(ticket.worktree_path),
+                    worktree_path,
                     remote=config.default_git_remote,
                     branch=ticket.branch,
                 )
@@ -560,6 +600,7 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
+        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
 
         def on_confirm(confirmed: bool):
@@ -574,7 +615,7 @@ class CommandCenterTUI(App):
 
             def do_pull():
                 result = pull_from_remote(
-                    Path(ticket.worktree_path),
+                    worktree_path,
                     remote=config.default_git_remote,
                     branch=ticket.branch,
                 )
@@ -612,8 +653,10 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
+        worktree_path = self._resolve_worktree_path(ticket)
+
         # Fetch commit log
-        commits, error = get_commit_log(Path(ticket.worktree_path), limit=20)
+        commits, error = get_commit_log(worktree_path, limit=20)
 
         if error:
             self.push_screen(
@@ -632,8 +675,9 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
+        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
-        build_command = config.get_build_command(Path(ticket.worktree_path))
+        build_command = config.get_build_command(worktree_path)
 
         # Create output dialog
         output_dialog = OutputDialog("Building", build_command)
@@ -651,7 +695,7 @@ class CommandCenterTUI(App):
 
         # Start the build
         run_build(
-            Path(ticket.worktree_path),
+            worktree_path,
             ticket.branch,
             on_output=on_output,
             on_complete=on_complete,
