@@ -46,6 +46,17 @@ from ccc.utils import (
     confirm,
     expand_path,
 )
+from ccc.todo import (
+    init_todos,
+    add_todo,
+    list_todos,
+    update_todo_status,
+    delete_todo,
+    move_todo,
+    assign_todo,
+    set_blocked_by,
+    update_todo_description,
+)
 
 console = Console()
 
@@ -189,6 +200,7 @@ def create(
     init_status_file(branch_name)
     init_build_status(branch_name)
     init_test_status(branch_name)
+    init_todos(branch_name)
 
     # Add to registry
     try:
@@ -769,6 +781,399 @@ def tui():
         run_tui()
     except Exception as e:
         print_error(f"TUI error: {e}")
+        sys.exit(1)
+
+
+@cli.group()
+def todo():
+    """Manage todo lists for branches."""
+    pass
+
+
+@todo.command("add")
+@click.argument("branch_name")
+@click.argument("description")
+@click.option("--estimate", "-e", type=int, help="Estimated time in minutes")
+@click.option("--blocked-by", "-b", type=int, help="ID of blocking task")
+@click.option("--assign", "-a", help="Assign to agent")
+def todo_add(
+    branch_name: str,
+    description: str,
+    estimate: Optional[int],
+    blocked_by: Optional[int],
+    assign: Optional[str],
+):
+    """
+    Add a new todo item to a branch.
+
+    \b
+    Examples:
+        ccc todo add feature/IN-413 "Write unit tests"
+        ccc todo add feature/IN-413 "Add validation" --estimate 30
+        ccc todo add feature/IN-413 "Integration tests" --blocked-by 3
+        ccc todo add feature/IN-413 "Deploy to staging" --assign agent-1
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    try:
+        item = add_todo(
+            branch_name,
+            description,
+            estimated_minutes=estimate,
+            blocked_by=blocked_by,
+            assigned_agent=assign,
+        )
+        print_success(f"Added todo #{item.id}: {description}")
+        if estimate:
+            print_info(f"Estimated time: {estimate} minutes")
+        if blocked_by:
+            print_warning(f"Blocked by task #{blocked_by}")
+        if assign:
+            print_info(f"Assigned to: {assign}")
+    except ValueError as e:
+        print_error(f"Failed to add todo: {e}")
+        sys.exit(1)
+
+
+@todo.command("list")
+@click.argument("branch_name")
+@click.option("--all", "-a", is_flag=True, help="Show all todos including completed")
+def todo_list_cmd(branch_name: str, all: bool):
+    """
+    List todos for a branch.
+
+    \b
+    Examples:
+        ccc todo list feature/IN-413
+        ccc todo list feature/IN-413 --all
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    todo_list = list_todos(branch_name)
+
+    if not todo_list.items:
+        print_info(f"No todos for branch '{branch_name}'")
+        return
+
+    # Filter out completed items if not showing all
+    config = load_config()
+    items = todo_list.items
+    if not all and not config.todos_show_completed:
+        items = [item for item in items if item.status != "done"]
+
+    # Display todos
+    console.print(f"\n[bold]Todo List: {branch_name}[/bold]\n")
+
+    for item in items:
+        # Status symbol
+        symbols = {
+            "done": "✓",
+            "in_progress": "⚙",
+            "not_started": "☐",
+            "blocked": "⏸",
+        }
+        symbol = symbols.get(item.status, "○")
+
+        # Build status line
+        status_parts = []
+        if item.assigned_agent:
+            status_parts.append(f"[{item.assigned_agent}]")
+        if item.blocked_by:
+            status_parts.append(f"(blocked by #{item.blocked_by})")
+        if item.estimated_minutes:
+            status_parts.append(f"~{item.estimated_minutes}m")
+
+        status_str = " ".join(status_parts)
+
+        # Print todo item
+        console.print(f"{symbol} {item.id}. {item.description} {status_str}")
+
+    # Display progress
+    stats = todo_list.progress_stats()
+    progress = todo_list.progress_percentage()
+    console.print(
+        f"\n[bold]Progress:[/bold] {stats['done']}/{stats['total']} complete ({progress:.0f}%)"
+    )
+    console.print(
+        f"  {stats['in_progress']} in progress, "
+        f"{stats['not_started']} not started, "
+        f"{stats['blocked']} blocked\n"
+    )
+
+
+@todo.command("done")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+def todo_done(branch_name: str, task_id: int):
+    """
+    Mark a todo as done.
+
+    \b
+    Examples:
+        ccc todo done feature/IN-413 3
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = update_todo_status(branch_name, task_id, "done")
+    if item:
+        print_success(f"Marked todo #{task_id} as done: {item.description}")
+    else:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+
+@todo.command("status")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.argument(
+    "status", type=click.Choice(["not_started", "in_progress", "done", "blocked"])
+)
+def todo_status_cmd(branch_name: str, task_id: int, status: str):
+    """
+    Update todo status.
+
+    \b
+    Examples:
+        ccc todo status feature/IN-413 3 in_progress
+        ccc todo status feature/IN-413 5 blocked
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = update_todo_status(branch_name, task_id, status)
+    if item:
+        print_success(f"Updated todo #{task_id} status to '{status}'")
+    else:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+
+@todo.command("delete")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def todo_delete(branch_name: str, task_id: int, force: bool):
+    """
+    Delete a todo item.
+
+    \b
+    Examples:
+        ccc todo delete feature/IN-413 3
+        ccc todo delete feature/IN-413 5 --force
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Get the item first to show what will be deleted
+    todo_list = list_todos(branch_name)
+    item = todo_list.get_item(task_id)
+
+    if not item:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+    # Confirm deletion
+    if not force:
+        console.print(f"\n[bold yellow]About to delete:[/bold yellow]")
+        console.print(f"  #{item.id}: {item.description}")
+        if not confirm("Are you sure?"):
+            print_info("Deletion cancelled")
+            return
+
+    if delete_todo(branch_name, task_id):
+        print_success(f"Deleted todo #{task_id}")
+    else:
+        print_error(f"Failed to delete todo #{task_id}")
+        sys.exit(1)
+
+
+@todo.command("move")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.argument("position", type=int)
+def todo_move(branch_name: str, task_id: int, position: int):
+    """
+    Move a todo to a new position (1-indexed).
+
+    \b
+    Examples:
+        ccc todo move feature/IN-413 5 1  # Move task 5 to first position
+        ccc todo move feature/IN-413 2 4  # Move task 2 to fourth position
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    if move_todo(branch_name, task_id, position):
+        print_success(f"Moved todo #{task_id} to position {position}")
+    else:
+        print_error(f"Failed to move todo #{task_id} to position {position}")
+        print_info("Check that the task exists and position is valid")
+        sys.exit(1)
+
+
+@todo.command("assign")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.argument("agent_name")
+def todo_assign_cmd(branch_name: str, task_id: int, agent_name: str):
+    """
+    Assign a todo to an agent.
+
+    \b
+    Examples:
+        ccc todo assign feature/IN-413 3 agent-1
+        ccc todo assign feature/IN-413 5 claude-engineer
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = assign_todo(branch_name, task_id, agent_name)
+    if item:
+        print_success(f"Assigned todo #{task_id} to {agent_name}")
+    else:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+
+@todo.command("unassign")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+def todo_unassign(branch_name: str, task_id: int):
+    """
+    Unassign a todo from an agent.
+
+    \b
+    Examples:
+        ccc todo unassign feature/IN-413 3
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = assign_todo(branch_name, task_id, None)
+    if item:
+        print_success(f"Unassigned todo #{task_id}")
+    else:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+
+@todo.command("block")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.argument("blocked_by", type=int)
+def todo_block(branch_name: str, task_id: int, blocked_by: int):
+    """
+    Set a todo as blocked by another todo.
+
+    \b
+    Examples:
+        ccc todo block feature/IN-413 5 3  # Task 5 is blocked by task 3
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    try:
+        item = set_blocked_by(branch_name, task_id, blocked_by)
+        if item:
+            print_success(f"Todo #{task_id} is now blocked by #{blocked_by}")
+            print_warning(f"Status automatically set to 'blocked'")
+        else:
+            print_error(f"Todo #{task_id} not found")
+            sys.exit(1)
+    except ValueError as e:
+        print_error(f"Failed to set dependency: {e}")
+        sys.exit(1)
+
+
+@todo.command("unblock")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+def todo_unblock(branch_name: str, task_id: int):
+    """
+    Remove blocking dependency from a todo.
+
+    \b
+    Examples:
+        ccc todo unblock feature/IN-413 5
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = set_blocked_by(branch_name, task_id, None)
+    if item:
+        print_success(f"Removed blocking dependency from todo #{task_id}")
+    else:
+        print_error(f"Todo #{task_id} not found")
+        sys.exit(1)
+
+
+@todo.command("edit")
+@click.argument("branch_name")
+@click.argument("task_id", type=int)
+@click.argument("description")
+def todo_edit(branch_name: str, task_id: int, description: str):
+    """
+    Edit a todo's description.
+
+    \b
+    Examples:
+        ccc todo edit feature/IN-413 3 "Write comprehensive unit tests"
+    """
+    registry = TicketRegistry()
+
+    # Check if branch exists
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    item = update_todo_description(branch_name, task_id, description)
+    if item:
+        print_success(f"Updated todo #{task_id}: {description}")
+    else:
+        print_error(f"Todo #{task_id} not found")
         sys.exit(1)
 
 

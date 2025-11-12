@@ -47,6 +47,12 @@ class Config:
     # Diff viewer configuration
     diff_viewer: str = "delta"  # Options: "delta", "diff-so-fancy", "git"
 
+    # Phase 4: Todo configuration
+    todos_auto_assign_first_task: bool = True
+    todos_show_completed: bool = True
+    todos_max_display: int = 10
+    todos_estimate_in_hours: bool = False
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -267,6 +273,18 @@ def load_config() -> Config:
             ),
             project_commands=data.get("project_commands"),
             diff_viewer=data.get("diff_viewer", Config.diff_viewer),
+            todos_auto_assign_first_task=data.get(
+                "todos_auto_assign_first_task", Config.todos_auto_assign_first_task
+            ),
+            todos_show_completed=data.get(
+                "todos_show_completed", Config.todos_show_completed
+            ),
+            todos_max_display=data.get(
+                "todos_max_display", Config.todos_max_display
+            ),
+            todos_estimate_in_hours=data.get(
+                "todos_estimate_in_hours", Config.todos_estimate_in_hours
+            ),
         )
 
         return config
