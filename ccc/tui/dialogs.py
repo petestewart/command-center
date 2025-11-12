@@ -700,8 +700,15 @@ class FileBrowserDialog(BaseDialog):
 
     DEFAULT_CSS = """
     FileBrowserDialog > Container {
+        width: 100%;
+        height: 100%;
         max-width: 140;
         max-height: 95%;
+    }
+
+    FileBrowserDialog Horizontal {
+        width: 100%;
+        height: 1fr;
     }
 
     FileBrowserDialog .file-list-container {
