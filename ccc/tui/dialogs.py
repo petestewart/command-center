@@ -700,7 +700,7 @@ class FileBrowserDialog(BaseDialog):
 
     DEFAULT_CSS = """
     FileBrowserDialog > Container {
-        max-width: 140;
+        max-width: 80;
         max-height: 95%;
     }
 

@@ -75,18 +75,29 @@ class CommandRunner:
                 universal_newlines=True,
             )
 
-            # Read output line by line
-            for line in self.process.stdout:
-                line = line.rstrip("\n")
-                self.output_lines.append(line)
+            # Read output line by line and stream to callback
+            try:
+                if self.process.stdout:
+                    for line in self.process.stdout:
+                        line = line.rstrip("\n")
+                        self.output_lines.append(line)
 
-                # Call callback if provided
-                if self.callback:
-                    self.callback(line)
+                        # Call callback if provided
+                        if self.callback:
+                            self.callback(line)
+            except (IOError, OSError, ValueError):
+                # Handle broken pipe or closed file errors
+                # This can happen if process exits before we finish reading
+                pass
+            finally:
+                # Close stdout to ensure the iteration completes
+                if self.process and self.process.stdout:
+                    self.process.stdout.close()
 
-            # Wait for process to complete
-            self.process.wait()
-            self.returncode = self.process.returncode
+                # Ensure process is fully finished
+                if self.process:
+                    self.process.wait()
+                    self.returncode = self.process.returncode
 
         except Exception as e:
             logger.error(f"Error running command: {e}", exc_info=True)
