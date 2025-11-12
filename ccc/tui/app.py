@@ -725,8 +725,8 @@ class CommandCenterTUI(App):
 
         config = load_config()
 
-        # Try to get editor from config, then environment, then default
-        editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "vim"
+        # Try to get editor from config, then environment, then default to cursor
+        editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "cursor"
 
         try:
             # Run editor in subprocess
