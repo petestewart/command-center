@@ -713,6 +713,25 @@ class FileBrowserDialog(BaseDialog):
         padding: 1 2;
     }
 
+    FileBrowserDialog .dialog-title {
+        width: 100%;
+        content-align: center middle;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    FileBrowserDialog .dialog-buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+        layout: horizontal;
+    }
+
+    FileBrowserDialog Button {
+        margin: 0 1;
+    }
+
     FileBrowserDialog .file-list-container {
         width: 30;
         height: 100%;
