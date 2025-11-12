@@ -699,37 +699,9 @@ class FileBrowserDialog(BaseDialog):
     ]
 
     DEFAULT_CSS = """
-    FileBrowserDialog {
-        align: center middle;
-    }
-
     FileBrowserDialog > Container {
-        width: auto;
-        height: auto;
         max-width: 140;
         max-height: 95%;
-        background: $surface;
-        border: thick $primary;
-        padding: 1 2;
-    }
-
-    FileBrowserDialog .dialog-title {
-        width: 100%;
-        content-align: center middle;
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
-    }
-
-    FileBrowserDialog .dialog-buttons {
-        width: 100%;
-        height: auto;
-        align: center middle;
-        layout: horizontal;
-    }
-
-    FileBrowserDialog Button {
-        margin: 0 1;
     }
 
     FileBrowserDialog .file-list-container {
