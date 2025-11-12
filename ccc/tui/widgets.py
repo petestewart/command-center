@@ -83,11 +83,26 @@ class FileCheckboxList(VerticalScroll):
             for file in self.files:
                 status_str = f"[{self._get_status_color(file.status)}]{file.display_status}[/]"
                 label = f"{status_str}: {file.path}"
-                checkbox = Checkbox(label, value=file.staged, id=f"file-{file.path}")
+                # Create a valid ID by replacing invalid characters
+                safe_id = self._sanitize_id(file.path)
+                checkbox = Checkbox(label, value=file.staged, id=safe_id)
                 self._checkboxes[file.path] = checkbox
                 if file.staged:
                     self.selected_files.add(file.path)
                 yield checkbox
+
+    def _sanitize_id(self, file_path: str) -> str:
+        """
+        Convert a file path to a valid Textual ID.
+
+        Replaces invalid characters (/, ., etc.) with underscores and prefixes with 'file'.
+        Valid IDs contain only letters, numbers, underscores, and hyphens, and cannot start with a number.
+        """
+        # Replace invalid characters with underscores
+        safe_id = "".join(c if c.isalnum() or c == "-" else "_" for c in file_path)
+        # Ensure it starts with a letter
+        safe_id = f"file_{safe_id}"
+        return safe_id
 
     def _get_status_color(self, status: str) -> str:
         """Get color for file status."""
@@ -102,8 +117,15 @@ class FileCheckboxList(VerticalScroll):
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         """Handle checkbox state changes."""
-        # Extract file path from checkbox ID
-        file_path = event.checkbox.id.replace("file-", "")
+        # Find the file path by matching the sanitized ID
+        file_path = None
+        for fp, checkbox in self._checkboxes.items():
+            if checkbox.id == event.checkbox.id:
+                file_path = fp
+                break
+
+        if not file_path:
+            return
 
         if event.value:
             self.selected_files.add(file_path)
