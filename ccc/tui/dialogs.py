@@ -5,7 +5,7 @@ Dialog components for Command Center TUI.
 from typing import Callable, Optional, List
 from pathlib import Path
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static, Button, Label, LoadingIndicator
 from textual.binding import Binding
