@@ -271,6 +271,9 @@ class TicketDetailView(VerticalScroll):
             yield GitStatusPanel(id="git-panel", classes="status-panel")
             yield BuildStatusPanel(id="build-panel", classes="status-panel")
             yield TestStatusPanel(id="test-panel", classes="status-panel")
+            # Phase 7: API Testing panel
+            from ccc.tui.api_widgets import ApiRequestListPanel
+            yield ApiRequestListPanel(branch_name="", id="api-panel", classes="status-panel")
 
     def watch_branch_name(self, branch_name: Optional[str]):
         """Update when branch_name changes."""
@@ -316,6 +319,12 @@ class TicketDetailView(VerticalScroll):
 
         test_panel = self.query_one("#test-panel", TestStatusPanel)
         test_panel.branch_name = self.ticket.branch
+
+        # Phase 7: Update API panel
+        from ccc.tui.api_widgets import ApiRequestListPanel
+        api_panel = self.query_one("#api-panel", ApiRequestListPanel)
+        api_panel.branch_name = self.ticket.branch
+        api_panel.refresh_requests()
 
     def refresh_status(self):
         """Manually refresh all status panels."""
@@ -387,6 +396,8 @@ class CommandCenterTUI(App):
         Binding("P", "pull", "Pull"),
         Binding("l", "log", "Log"),
         Binding("b", "build", "Build"),
+        # Phase 7: API Testing
+        Binding("a", "api_request", "API"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -703,6 +714,27 @@ class CommandCenterTUI(App):
 
         # Show the dialog
         self.push_screen(output_dialog)
+
+    def action_api_request(self):
+        """Show API request builder for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        from ccc.tui.api_widgets import RequestBuilderDialog
+
+        def on_request_saved(result):
+            """Handle request save completion."""
+            if result and result.get("success"):
+                self.notify(result.get("message", "Request saved"), severity="information")
+                # Refresh the API panel
+                self.action_refresh()
+
+        self.push_screen(
+            RequestBuilderDialog(ticket.branch),
+            on_request_saved
+        )
 
 
 def run_tui():
