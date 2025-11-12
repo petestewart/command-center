@@ -719,7 +719,7 @@ class CommandCenterTUI(App):
         )
 
     def _open_in_editor(self, file_path: str):
-        """Open a file in the configured editor."""
+        """Open the workspace folder in the configured editor with the file selected."""
         import subprocess
         import os
 
@@ -729,9 +729,22 @@ class CommandCenterTUI(App):
         editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "cursor"
 
         try:
+            file_path_obj = Path(file_path)
+
+            # Find the git worktree root by looking for .git
+            worktree_root = file_path_obj.parent
+            while worktree_root != worktree_root.parent:  # Stop at filesystem root
+                if (worktree_root / ".git").exists():
+                    break
+                worktree_root = worktree_root.parent
+
+            # Build command: open workspace with file
+            # Most editors support "editor workspace_folder:file" syntax
+            workspace_file_arg = f"{worktree_root}:{file_path}"
+
             # Run editor in subprocess
-            subprocess.run([editor, file_path], check=False)
-            self.notify(f"Opened {Path(file_path).name} in {editor}", severity="information")
+            subprocess.run([editor, workspace_file_arg], check=False)
+            self.notify(f"Opened {file_path_obj.name} in {editor}", severity="information")
         except Exception as e:
             self.push_screen(
                 ErrorDialog("Failed to Open Editor", f"Could not open {editor}: {e}")
