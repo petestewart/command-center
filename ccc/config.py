@@ -47,6 +47,12 @@ class Config:
     # Diff viewer configuration
     diff_viewer: str = "delta"  # Options: "delta", "diff-so-fancy", "git"
 
+    # Phase 7: API Testing settings
+    api_default_timeout: int = 30
+    api_follow_redirects: bool = True
+    api_max_history_entries: int = 50
+    api_verify_ssl: bool = True
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -267,6 +273,10 @@ def load_config() -> Config:
             ),
             project_commands=data.get("project_commands"),
             diff_viewer=data.get("diff_viewer", Config.diff_viewer),
+            api_default_timeout=data.get("api_default_timeout", Config.api_default_timeout),
+            api_follow_redirects=data.get("api_follow_redirects", Config.api_follow_redirects),
+            api_max_history_entries=data.get("api_max_history_entries", Config.api_max_history_entries),
+            api_verify_ssl=data.get("api_verify_ssl", Config.api_verify_ssl),
         )
 
         return config
