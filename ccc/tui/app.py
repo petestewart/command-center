@@ -738,12 +738,9 @@ class CommandCenterTUI(App):
                     break
                 worktree_root = worktree_root.parent
 
-            # Build command: open workspace with file
-            # Most editors support "editor workspace_folder:file" syntax
-            workspace_file_arg = f"{worktree_root}:{file_path}"
-
-            # Run editor in subprocess
-            subprocess.run([editor, workspace_file_arg], check=False)
+            # Open workspace folder with the file as an argument
+            # Use --goto file:line:column syntax if available, or just pass both folder and file
+            subprocess.run([editor, str(worktree_root), str(file_path)], check=False)
             self.notify(f"Opened {file_path_obj.name} in {editor}", severity="information")
         except Exception as e:
             self.push_screen(
