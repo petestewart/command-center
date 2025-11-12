@@ -33,8 +33,6 @@ class BaseDialog(ModalScreen):
     }
 
     BaseDialog > Container {
-        width: auto;
-        height: auto;
         max-width: 80;
         max-height: 80%;
         background: $surface;
@@ -700,42 +698,12 @@ class FileBrowserDialog(BaseDialog):
 
     DEFAULT_CSS = """
     FileBrowserDialog > Container {
-        width: auto;
-        height: auto;
         max-width: 140;
         max-height: 95%;
-        background: $surface;
-        border: thick $primary;
-        padding: 1 2;
-    }
-
-    FileBrowserDialog {
-        align: center middle;
-    }
-
-    FileBrowserDialog .dialog-title {
-        width: 100%;
-        content-align: center middle;
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
-    }
-
-    FileBrowserDialog .dialog-buttons {
-        width: 100%;
-        height: auto;
-        align: center middle;
-        layout: horizontal;
-    }
-
-    FileBrowserDialog Button {
-        margin: 0 1;
     }
 
     FileBrowserDialog > Container > Horizontal {
-        width: 100%;
-        height: auto;
-        layout: horizontal;
+        height: 1fr;
     }
 
     FileBrowserDialog .file-list-container {
