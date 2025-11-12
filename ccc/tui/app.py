@@ -31,13 +31,14 @@ from ccc.tui.dialogs import (
     SuccessDialog,
     LogDialog,
     OutputDialog,
+    FileBrowserDialog,
 )
 from ccc.git_operations import (
     push_to_remote,
     pull_from_remote,
     get_commit_log,
 )
-from ccc.build_runner import run_build
+from ccc.build_runner import run_build, run_tests
 
 
 class StatusPanel(Static):
@@ -359,12 +360,15 @@ class CommandCenterTUI(App):
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select", "Select", show=False),
-        # Phase 3: New keybindings
+        # Phase 3 Week 1: Git & Build
         Binding("c", "commit", "Commit"),
         Binding("p", "push", "Push"),
         Binding("P", "pull", "Pull"),
         Binding("l", "log", "Log"),
         Binding("b", "build", "Build"),
+        # Phase 3 Week 2: Tests & Files
+        Binding("t", "test", "Test"),
+        Binding("f", "files", "Files"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -659,6 +663,79 @@ class CommandCenterTUI(App):
 
         # Show the dialog
         self.push_screen(output_dialog)
+
+    def action_test(self):
+        """Trigger tests for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        config = load_config()
+        test_command = config.get_test_command(Path(ticket.worktree_path))
+
+        # Create output dialog
+        output_dialog = OutputDialog("Running Tests", test_command)
+
+        # Callbacks for streaming
+        def on_output(line: str):
+            """Handle test output line."""
+            self.call_from_thread(output_dialog.append_output, line)
+
+        def on_complete(success: bool, message: str):
+            """Handle test completion."""
+            self.call_from_thread(output_dialog.set_complete, success, message)
+            # Refresh test status panel
+            self.call_from_thread(self.action_refresh)
+
+        # Start the tests
+        run_tests(
+            Path(ticket.worktree_path),
+            ticket.branch,
+            on_output=on_output,
+            on_complete=on_complete,
+        )
+
+        # Show the dialog
+        self.push_screen(output_dialog)
+
+    def action_files(self):
+        """Show file browser/preview for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        def on_file_action(result):
+            """Handle file browser result."""
+            if result and result.get("action") == "edit":
+                file_path = result.get("file_path")
+                if file_path:
+                    self._open_in_editor(file_path)
+
+        self.push_screen(
+            FileBrowserDialog(Path(ticket.worktree_path), ticket.branch),
+            on_file_action
+        )
+
+    def _open_in_editor(self, file_path: str):
+        """Open a file in the configured editor."""
+        import subprocess
+        import os
+
+        config = load_config()
+
+        # Try to get editor from config, then environment, then default
+        editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "vim"
+
+        try:
+            # Run editor in subprocess
+            subprocess.run([editor, file_path], check=False)
+            self.notify(f"Opened {Path(file_path).name} in {editor}", severity="information")
+        except Exception as e:
+            self.push_screen(
+                ErrorDialog("Failed to Open Editor", f"Could not open {editor}: {e}")
+            )
 
 
 def run_tui():

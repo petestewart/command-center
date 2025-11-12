@@ -47,6 +47,9 @@ class Config:
     # Diff viewer configuration
     diff_viewer: str = "delta"  # Options: "delta", "diff-so-fancy", "git"
 
+    # Editor configuration (falls back to $EDITOR env var, then vim)
+    editor: Optional[str] = None
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -218,6 +221,7 @@ def load_config() -> Config:
             ),
             project_commands=data.get("project_commands"),
             diff_viewer=data.get("diff_viewer", Config.diff_viewer),
+            editor=data.get("editor"),
         )
 
         return config
