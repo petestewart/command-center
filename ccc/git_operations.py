@@ -110,7 +110,11 @@ def run_git_command(
 
 def get_changed_files(worktree_path: Path) -> Tuple[List[GitFile], Optional[str]]:
     """
-    Get list of changed files in the worktree.
+    Get list of changed files in the worktree, compared against the merge base with main.
+
+    This shows files that are different in the current branch compared to main,
+    allowing the user to see what changes are in their branch even if the worktree
+    is on a different branch than expected.
 
     Args:
         worktree_path: Path to the git worktree
@@ -119,48 +123,39 @@ def get_changed_files(worktree_path: Path) -> Tuple[List[GitFile], Optional[str]
         Tuple of (list of GitFile objects, error message if any)
     """
     try:
-        # Get staged files
+        # Try to find the merge-base with main or master
         returncode, stdout, stderr = run_git_command(
-            ["diff", "--cached", "--name-status"], worktree_path
+            ["merge-base", "--fork-point", "main", "HEAD"], worktree_path
         )
 
-        staged_files = {}
+        if returncode != 0:
+            # Fall back to trying master
+            returncode, stdout, stderr = run_git_command(
+                ["merge-base", "--fork-point", "master", "HEAD"], worktree_path
+            )
+
+        if returncode != 0:
+            # If that fails, just use the current branch vs main
+            merge_base_ref = "main"
+        else:
+            merge_base_ref = stdout.strip()
+
+        # Get files changed between merge-base and HEAD
+        returncode, stdout, stderr = run_git_command(
+            ["diff", "--name-status", f"{merge_base_ref}...HEAD"], worktree_path
+        )
+
+        files_dict = {}
         if returncode == 0 and stdout:
             for line in stdout.strip().split("\n"):
                 if line:
                     parts = line.split("\t", 1)
                     if len(parts) == 2:
                         status, path = parts
-                        staged_files[path] = GitFile(
-                            path=path, status=status[0], staged=True
+                        # Take first character of status (M, A, D, R, etc.)
+                        files_dict[path] = GitFile(
+                            path=path, status=status[0], staged=False
                         )
-
-        # Get unstaged files
-        returncode, stdout, stderr = run_git_command(
-            ["diff", "--name-status"], worktree_path
-        )
-
-        files_dict = dict(staged_files)  # Start with staged files
-        if returncode == 0 and stdout:
-            for line in stdout.strip().split("\n"):
-                if line:
-                    parts = line.split("\t", 1)
-                    if len(parts) == 2:
-                        status, path = parts
-                        if path not in files_dict:
-                            files_dict[path] = GitFile(
-                                path=path, status=status[0], staged=False
-                            )
-
-        # Get untracked files
-        returncode, stdout, stderr = run_git_command(
-            ["ls-files", "--others", "--exclude-standard"], worktree_path
-        )
-
-        if returncode == 0 and stdout:
-            for line in stdout.strip().split("\n"):
-                if line and line not in files_dict:
-                    files_dict[line] = GitFile(path=line, status="?", staged=False)
 
         return list(files_dict.values()), None
 
