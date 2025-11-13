@@ -5,7 +5,9 @@
 **Duration:** 2-3 weeks
 **Prerequisites:** Phase 7 must be completed
 
-This document outlines advanced API testing features that were deferred from the initial Phase 7 implementation. These features add authentication support, advanced assertions, and workflow automation.
+This document outlines advanced API testing features that were deferred from the initial Phase 7 implementation. These features add authentication support, environment management, and request chaining for workflow automation.
+
+**Note:** Advanced assertion features were removed from this phase to keep it focused. See `PHASE_7_FUTURE_ASSERTIONS.md` for deferred assertion features.
 
 ---
 
@@ -83,94 +85,7 @@ requests:
       key_value: "{{api_key}}"
 ```
 
-### 2. Advanced Assertions
-
-#### 2.1 JSON Path Assertions
-
-Assert on specific fields in JSON responses:
-
-```yaml
-requests:
-  - name: "Get user"
-    method: GET
-    url: "{{base_url}}/api/users/123"
-    assertions:
-      - type: status
-        expected: 200
-      - type: jsonpath
-        path: "$.user.id"
-        expected: 123
-      - type: jsonpath
-        path: "$.user.email"
-        contains: "@example.com"
-      - type: jsonpath
-        path: "$.user.roles"
-        contains: "admin"
-```
-
-**Response Viewer shows:**
-```
-Assertions:
-✓ Status code is 200
-✓ $.user.id equals 123
-✓ $.user.email contains "@example.com"
-✗ $.user.roles contains "admin" (actual: ["user"])
-```
-
-#### 2.2 Schema Validation
-
-Validate response against JSON Schema:
-
-```yaml
-requests:
-  - name: "Get user"
-    method: GET
-    url: "{{base_url}}/api/users/123"
-    assertions:
-      - type: schema
-        schema: |
-          {
-            "type": "object",
-            "required": ["user"],
-            "properties": {
-              "user": {
-                "type": "object",
-                "required": ["id", "email"],
-                "properties": {
-                  "id": {"type": "integer"},
-                  "email": {"type": "string", "format": "email"}
-                }
-              }
-            }
-          }
-```
-
-#### 2.3 Regular Expression Matching
-
-Match response fields against regex patterns:
-
-```yaml
-assertions:
-  - type: regex
-    path: "$.user.email"
-    pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
-  - type: regex
-    field: body
-    pattern: "success.*true"
-```
-
-#### 2.4 Response Time Assertions
-
-Assert on response time:
-
-```yaml
-assertions:
-  - type: response_time
-    max_ms: 500
-    message: "API should respond within 500ms"
-```
-
-### 3. Request Chaining
+### 2. Request Chaining
 
 Use response data from one request in subsequent requests:
 
@@ -204,7 +119,7 @@ requests:
 - Stop on first failure
 - Display captured variables
 
-### 4. Environment Management
+### 3. Environment Management
 
 Support for multiple environments (dev, staging, prod):
 
@@ -248,98 +163,38 @@ ccc api run <branch> <request> --env staging
 - Quick switch between environments
 - Color coding (dev=green, staging=yellow, prod=red)
 
-### 5. Mock Server Integration
-
-Integration with mock servers for testing:
-
-```yaml
-requests:
-  - name: "Test with mock"
-    method: POST
-    url: "{{base_url}}/api/upload"
-    mock:
-      enabled: true
-      response:
-        status: 200
-        body: |
-          {
-            "success": true,
-            "id": "mock-123"
-          }
-        delay_ms: 100
-```
-
-**Features:**
-- Record actual responses and replay as mocks
-- Override specific requests with mocks
-- Simulate network delays and errors
-- Useful for offline development
-
-### 6. Response Caching
-
-Cache responses for faster iteration:
-
-```yaml
-config:
-  cache:
-    enabled: true
-    ttl_seconds: 300
-    invalidate_on_change: true
-```
-
-**Behavior:**
-- Cache GET requests by default
-- Display cache indicator in response viewer
-- Manual cache invalidation
-- Useful for expensive API calls during testing
-
-### 7. Request Collections & Folders
-
-Organize requests into folders:
-
-```yaml
-collections:
-  - name: "User Management"
-    folder: "users"
-    requests:
-      - "Get user"
-      - "Create user"
-      - "Update user"
-      - "Delete user"
-
-  - name: "Authentication"
-    folder: "auth"
-    requests:
-      - "Login"
-      - "Logout"
-      - "Refresh token"
-```
-
-**TUI:**
-- Tree view of collections
-- Expand/collapse folders
-- Run all requests in a collection
-- Export/import collections
-
 ---
 
 ## Implementation Priority
 
-**High Priority (Week 1-2):**
-1. Authentication support (Basic, Bearer, API Key)
-2. JSON path assertions
-3. Response time assertions
+**Week 1: Authentication & Data Structures**
+1. Extend ApiRequest with `auth` field
+2. Implement Basic Auth support
+3. Implement Bearer Token support
+4. Implement API Key support (header and query param)
+5. Update TUI request builder for authentication
 
-**Medium Priority (Week 2-3):**
-4. Environment management
-5. Request chaining
-6. Schema validation
+**Week 2: Environment Management**
+6. Create environment management module
+7. Multi-environment variable system
+8. CLI commands for environment management
+9. TUI environment indicator and switcher
+10. Production environment confirmation dialogs
 
-**Low Priority (Future):**
-7. OAuth 2.0 support
-8. Mock server integration
-9. Response caching
-10. Request collections
+**Week 3: Request Chaining & Polish**
+11. Add `capture` and `depends_on` fields to ApiRequest
+12. Implement request chain execution
+13. Variable capture from responses using JSONPath
+14. CLI command for running chains
+15. Testing and documentation
+
+**Deferred to Future:**
+- Advanced assertions (see PHASE_7_FUTURE_ASSERTIONS.md)
+- OAuth 2.0 support
+- Keyring credential storage
+- Mock server integration
+- Response caching
+- Request collections/folders
 
 ---
 
@@ -349,10 +204,10 @@ collections:
 
 ```txt
 # requirements.txt additions
-jsonpath-ng>=1.6.0      # JSON path assertions
-jsonschema>=4.20.0      # Schema validation
-keyring>=24.3.0         # Secure credential storage
+jsonpath-ng>=1.6.0      # JSON path extraction for variable capture
 ```
+
+**Note:** No other new dependencies required! We use the existing `requests` library for authentication and standard library features for environment management.
 
 ### Data Structure Updates
 
@@ -360,36 +215,47 @@ keyring>=24.3.0         # Secure credential storage
 # Extend ApiRequest dataclass
 @dataclass
 class ApiRequest:
-    # ... existing fields ...
+    # ... existing Phase 7 fields ...
 
-    # New fields for enhancements
+    # New fields for Phase 7 Enhancements (all optional for backward compatibility)
     auth: Optional[AuthConfig] = None
-    assertions: List[Assertion] = field(default_factory=list)
     capture: List[CaptureRule] = field(default_factory=list)
     depends_on: Optional[str] = None
-    mock: Optional[MockConfig] = None
 
 @dataclass
 class AuthConfig:
-    type: str  # "basic", "bearer", "oauth2", "api_key"
-    # Type-specific fields stored as dict
-    config: Dict[str, Any]
+    """Authentication configuration."""
+    type: str  # "basic", "bearer", "api_key"
 
-@dataclass
-class Assertion:
-    type: str  # "status", "jsonpath", "schema", "regex", "response_time"
-    config: Dict[str, Any]
+    # Basic auth
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    # Bearer token
+    token: Optional[str] = None
+
+    # API key
+    key_name: Optional[str] = None
+    key_value: Optional[str] = None
+    location: Optional[str] = None  # "header" or "query"
 
 @dataclass
 class CaptureRule:
+    """Rule for capturing values from response."""
     name: str  # Variable name to capture to
-    jsonpath: str  # JSON path to extract
+    jsonpath: str  # JSON path to extract from response
 
 @dataclass
-class MockConfig:
-    enabled: bool
-    response: MockResponse
-    delay_ms: int = 0
+class Environment:
+    """An environment with its variables."""
+    name: str
+    variables: Dict[str, str]
+
+@dataclass
+class EnvironmentStore:
+    """Stores multiple environments and tracks current selection."""
+    current_environment: str = "dev"
+    environments: Dict[str, Environment] = field(default_factory=dict)
 ```
 
 ---
@@ -397,39 +263,44 @@ class MockConfig:
 ## Success Criteria
 
 ### Authentication
-✅ Supports Basic Auth, Bearer tokens, and API keys
-✅ Credentials stored securely
-✅ OAuth 2.0 token refresh works automatically
-
-### Advanced Assertions
-✅ JSON path assertions work correctly
-✅ Schema validation catches invalid responses
-✅ Response time assertions detect slow APIs
-✅ Assertion results clearly displayed in TUI
-
-### Request Chaining
-✅ Can capture values from responses
-✅ Captured values available in subsequent requests
-✅ Chain execution stops on first failure
-✅ Chain progress visible in TUI
+✅ Supports Basic Auth (username/password)
+✅ Supports Bearer tokens (Authorization header)
+✅ Supports API keys (header or query parameter)
+✅ Auth configuration supports variable substitution
+✅ Auth integrates with existing request execution
 
 ### Environment Management
-✅ Can define and switch between environments
+✅ Can define multiple environments (dev, staging, prod)
+✅ Can switch between environments via CLI and TUI
 ✅ Variables correctly substituted per environment
+✅ Environment variables support shell env var references
 ✅ Environment clearly indicated in TUI
-✅ Prevents accidental prod usage (confirmation)
+✅ Production environment requires confirmation
+✅ Environment files are .gitignore'd
+
+### Request Chaining
+✅ Can capture values from JSON responses using JSONPath
+✅ Captured values available in subsequent requests
+✅ Can define request dependencies using `depends_on`
+✅ Chain execution stops on first failure
+✅ Chain execution order determined by dependencies
+✅ Circular dependencies detected and reported
+
+### Backward Compatibility
+✅ All existing Phase 7 requests work without modification
+✅ New fields are optional with sensible defaults
+✅ YAML format remains compatible
 
 ---
 
 ## Documentation
 
-Required documentation for enhancements:
+Documentation updates required:
 
-1. **AUTHENTICATION.md** - Setting up authentication
-2. **ADVANCED_ASSERTIONS.md** - Using JSON path and schema validation
-3. **REQUEST_CHAINING.md** - Building request workflows
-4. **ENVIRONMENTS.md** - Managing multiple environments
-5. **MOCKING.md** - Using mock responses
+1. Update **API_TESTING.md** with authentication examples
+2. Add **ENVIRONMENTS.md** - Managing multiple environments
+3. Add **REQUEST_CHAINING.md** - Building request workflows
+4. Update inline help for new CLI commands
 
 ---
 
@@ -447,6 +318,9 @@ No breaking changes to YAML format - new fields are optional.
 ## Next Steps After Enhancements
 
 Once enhancements are complete, consider:
+- Advanced assertions (see PHASE_7_FUTURE_ASSERTIONS.md)
+- OAuth 2.0 authentication with token refresh
+- Keyring integration for secure credential storage
 - GraphQL query support
 - WebSocket testing
 - gRPC testing

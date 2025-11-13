@@ -20,3 +20,6 @@ python-dateutil>=2.8.0
 
 # HTTP client library for API testing (Phase 7)
 requests>=2.31.0
+
+# JSONPath extraction for variable capture (Phase 7 Enhancements)
+jsonpath-ng>=1.6.0

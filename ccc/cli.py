@@ -1130,6 +1130,257 @@ def api_var_delete(branch_name: str, key: str):
         sys.exit(1)
 
 
+@api.group("env")
+def api_env():
+    """Manage API environments (dev, staging, prod)."""
+    pass
+
+
+@api_env.command("list")
+@click.argument("branch_name")
+def api_env_list(branch_name: str):
+    """
+    List all environments.
+
+    \b
+    Examples:
+        ccc api env list feature/api-testing
+    """
+    from ccc.api_environments import load_environments
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    env_store = load_environments(branch_name)
+
+    console.print(f"\n[bold]Environments:[/bold]\n")
+    for env_name in env_store.environments.keys():
+        if env_name == env_store.current_environment:
+            console.print(f"  * {env_name} [green](current)[/green]")
+        else:
+            console.print(f"    {env_name}")
+    console.print()
+
+
+@api_env.command("show")
+@click.argument("branch_name")
+@click.option("--env", "-e", help="Environment name (default: current)")
+def api_env_show(branch_name: str, env: Optional[str]):
+    """
+    Show environment variables.
+
+    \b
+    Examples:
+        ccc api env show feature/api-testing
+        ccc api env show feature/api-testing --env staging
+    """
+    from ccc.api_environments import load_environments
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    env_store = load_environments(branch_name)
+
+    env_name = env or env_store.current_environment
+
+    if env_name not in env_store.environments:
+        print_error(f"Environment '{env_name}' not found")
+        sys.exit(1)
+
+    environment = env_store.environments[env_name]
+    is_current = env_name == env_store.current_environment
+
+    console.print(f"\n[bold]Environment: {env_name}[/bold]", end="")
+    if is_current:
+        console.print(" [green](current)[/green]")
+    else:
+        console.print()
+    console.print()
+
+    if not environment.variables:
+        print_info("No variables defined")
+        return
+
+    resolved_vars = environment.get_resolved_variables()
+
+    for key, value in environment.variables.items():
+        resolved_value = resolved_vars.get(key, value)
+        # Mask sensitive values
+        if any(word in key.lower() for word in ['token', 'key', 'secret', 'password']):
+            masked_value = resolved_value[:4] + "***" if len(resolved_value) > 4 else "***"
+            console.print(f"  {key}: {masked_value}")
+        else:
+            console.print(f"  {key}: {resolved_value}")
+    console.print()
+
+
+@api_env.command("switch")
+@click.argument("branch_name")
+@click.argument("environment")
+def api_env_switch(branch_name: str, environment: str):
+    """
+    Switch to a different environment.
+
+    \b
+    Examples:
+        ccc api env switch feature/api-testing dev
+        ccc api env switch feature/api-testing staging
+    """
+    from ccc.api_environments import switch_environment, list_environments
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Production confirmation
+    if environment.lower() == "prod" or environment.lower() == "production":
+        console.print("[bold yellow]⚠ Warning: Switching to production environment[/bold yellow]")
+        confirm = console.input("Are you sure? (yes/no): ").strip().lower()
+        if confirm != "yes":
+            print_info("Cancelled")
+            return
+
+    if switch_environment(branch_name, environment):
+        print_success(f"Switched to environment: {environment}")
+    else:
+        print_error(f"Environment '{environment}' not found")
+        print_info(f"Available environments: {', '.join(list_environments(branch_name))}")
+        sys.exit(1)
+
+
+@api_env.command("add")
+@click.argument("branch_name")
+@click.argument("environment")
+def api_env_add(branch_name: str, environment: str):
+    """
+    Add a new environment.
+
+    \b
+    Examples:
+        ccc api env add feature/api-testing staging
+    """
+    from ccc.api_environments import add_environment, list_environments
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    if environment in list_environments(branch_name):
+        print_error(f"Environment '{environment}' already exists")
+        sys.exit(1)
+
+    add_environment(branch_name, environment, {})
+    print_success(f"Added environment: {environment}")
+    print_info(f"Use 'ccc api env set {branch_name} {environment} <key> <value>' to add variables")
+
+
+@api_env.command("set")
+@click.argument("branch_name")
+@click.argument("environment")
+@click.argument("key")
+@click.argument("value")
+def api_env_set(branch_name: str, environment: str, key: str, value: str):
+    """
+    Set a variable in an environment.
+
+    \b
+    Examples:
+        ccc api env set feature/api-testing dev base_url "http://localhost:3000"
+        ccc api env set feature/api-testing prod base_url "https://api.example.com"
+    """
+    from ccc.api_environments import set_environment_variable, list_environments
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    if environment not in list_environments(branch_name):
+        print_error(f"Environment '{environment}' not found")
+        sys.exit(1)
+
+    set_environment_variable(branch_name, environment, key, value)
+    print_success(f"Set {environment}.{key} = '{value}'")
+
+
+@api.command("chain")
+@click.argument("branch_name")
+@click.argument("request_name")
+def api_chain(branch_name: str, request_name: str):
+    """
+    Execute a request chain.
+
+    Executes the specified request and all its dependencies in order.
+    Variables captured from responses are available in subsequent requests.
+    Execution stops on first failure.
+
+    \b
+    Examples:
+        ccc api chain feature/api-testing "Get user data"
+    """
+    from ccc.api_testing import execute_request_chain
+    from rich.table import Table
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    print_info(f"Executing request chain starting from: {request_name}")
+    console.print()
+
+    results = execute_request_chain(branch_name, request_name)
+
+    if not results:
+        print_error("No requests executed")
+        sys.exit(1)
+
+    # Display results table
+    table = Table(title="Chain Execution Results")
+    table.add_column("Request", style="cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("Time", justify="right")
+    table.add_column("Result")
+
+    all_success = True
+
+    for request, response, error in results:
+        if error:
+            all_success = False
+            table.add_row(
+                request.name,
+                "[red]ERROR[/red]",
+                "-",
+                error
+            )
+        elif response:
+            status_color = "green" if 200 <= response.status_code < 300 else "red"
+            status_text = f"[{status_color}]{response.status_code}[/{status_color}]"
+            table.add_row(
+                request.name,
+                status_text,
+                f"{response.elapsed_ms:.0f}ms",
+                f"{response.reason}"
+            )
+            if not response.is_success():
+                all_success = False
+
+    console.print(table)
+    console.print()
+
+    if all_success:
+        print_success(f"Chain completed successfully ({len(results)} requests)")
+    else:
+        print_error("Chain failed - see results above")
+        sys.exit(1)
+
+
 @cli.command()
 def config():
     """Initialize or reconfigure Command Center."""

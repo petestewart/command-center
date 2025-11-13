@@ -2,6 +2,7 @@
 API Testing module for Command Center
 
 Handles storage, execution, and management of API requests.
+Includes Phase 7 Enhancements: authentication, environments, and request chaining.
 """
 
 import yaml
@@ -9,6 +10,7 @@ import requests
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from ccc.api_request import (
     ApiRequest,
@@ -16,6 +18,10 @@ from ccc.api_request import (
     ApiRequestExecution,
     VariableStore,
     HttpMethod,
+    AuthConfig,
+    CaptureRule,
+    Environment,
+    EnvironmentStore,
 )
 from ccc.utils import get_ccc_home
 
@@ -278,6 +284,61 @@ def delete_request(branch_name: str, request_name: str) -> bool:
     return False
 
 
+def _apply_authentication(
+    auth_config: AuthConfig,
+    variables: VariableStore,
+    url: str
+) -> Tuple[Dict[str, str], str, Optional[Any]]:
+    """
+    Apply authentication configuration to request.
+
+    Args:
+        auth_config: Authentication configuration
+        variables: Variable store for substitution
+        url: Original URL (may be modified for query param auth)
+
+    Returns:
+        Tuple of (headers_to_add, modified_url, requests_auth_object)
+    """
+    headers = {}
+    auth_obj = None
+
+    if auth_config.type == "basic":
+        # HTTP Basic Auth
+        username = variables.substitute(auth_config.username or "")
+        password = variables.substitute(auth_config.password or "")
+        auth_obj = requests.auth.HTTPBasicAuth(username, password)
+
+    elif auth_config.type == "bearer":
+        # Bearer Token
+        token = variables.substitute(auth_config.token or "")
+        headers["Authorization"] = f"Bearer {token}"
+
+    elif auth_config.type == "api_key":
+        # API Key (header or query param)
+        key_name = variables.substitute(auth_config.key_name or "")
+        key_value = variables.substitute(auth_config.key_value or "")
+
+        if auth_config.location == "header":
+            headers[key_name] = key_value
+        elif auth_config.location == "query":
+            # Add to URL query parameters
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query)
+            query_params[key_name] = [key_value]
+            new_query = urlencode(query_params, doseq=True)
+            url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+
+    return headers, url, auth_obj
+
+
 def execute_request(
     request: ApiRequest,
     variables: VariableStore,
@@ -301,12 +362,22 @@ def execute_request(
         headers = {k: variables.substitute(v) for k, v in request.headers.items()}
         body = variables.substitute(request.body) if request.body else None
 
+        # Apply authentication if configured
+        auth_obj = None
+        if request.auth:
+            auth_headers, url, auth_obj = _apply_authentication(request.auth, variables, url)
+            headers.update(auth_headers)
+
         # Prepare request kwargs
         kwargs = {
             "timeout": request.timeout,
             "allow_redirects": request.follow_redirects,
             "verify": verify_ssl,
         }
+
+        # Add auth object if present (for Basic Auth)
+        if auth_obj:
+            kwargs["auth"] = auth_obj
 
         # Add headers if present
         if headers:
@@ -507,3 +578,191 @@ def clear_history(branch_name: str):
         branch_name: Branch name
     """
     save_history(branch_name, [])
+
+
+# ============================================================================
+# Phase 7 Enhancements: Request Chaining
+# ============================================================================
+
+
+def capture_variables_from_response(
+    response: ApiResponse,
+    capture_rules: List[CaptureRule]
+) -> Dict[str, str]:
+    """
+    Capture variables from response body using JSONPath.
+
+    Args:
+        response: ApiResponse to extract from
+        capture_rules: List of CaptureRule objects
+
+    Returns:
+        Dictionary of {variable_name: captured_value}
+    """
+    captured = {}
+
+    # Parse response body as JSON
+    try:
+        import json
+        body_data = json.loads(response.body)
+    except json.JSONDecodeError:
+        # Can't capture from non-JSON responses
+        return captured
+
+    # Apply each capture rule
+    for rule in capture_rules:
+        try:
+            from jsonpath_ng import parse as jsonpath_parse
+
+            # Parse JSONPath expression
+            jsonpath_expr = jsonpath_parse(rule.jsonpath)
+
+            # Find matches
+            matches = jsonpath_expr.find(body_data)
+
+            if matches:
+                # Use first match
+                value = matches[0].value
+                captured[rule.name] = str(value)
+        except Exception:
+            # Skip invalid capture rules
+            continue
+
+    return captured
+
+
+def build_request_chain(
+    requests_list: List[ApiRequest],
+    start_request_name: str
+) -> List[ApiRequest]:
+    """
+    Build execution chain starting from a request.
+
+    Analyzes depends_on fields to determine execution order.
+    Uses topological sort to handle dependencies.
+
+    Args:
+        requests_list: List of all available requests
+        start_request_name: Name of the request to start from
+
+    Returns:
+        Ordered list of requests to execute
+
+    Raises:
+        ValueError: If circular dependency detected or request not found
+    """
+    # Build a map of request names to requests
+    request_map = {req.name: req for req in requests_list}
+
+    # Check if start request exists
+    if start_request_name not in request_map:
+        raise ValueError(f"Request not found: {start_request_name}")
+
+    chain = []
+    visited = set()
+    visiting = set()  # For cycle detection
+
+    def visit(req_name: str):
+        """DFS to build dependency chain."""
+        if req_name in visiting:
+            raise ValueError(f"Circular dependency detected involving: {req_name}")
+
+        if req_name in visited:
+            return
+
+        visiting.add(req_name)
+
+        # Find the request
+        if req_name not in request_map:
+            raise ValueError(f"Request not found: {req_name}")
+
+        req = request_map[req_name]
+
+        # Visit dependencies first
+        if req.depends_on:
+            visit(req.depends_on)
+
+        # Add this request to chain
+        visiting.remove(req_name)
+        visited.add(req_name)
+        chain.append(req)
+
+    visit(start_request_name)
+    return chain
+
+
+def execute_request_chain(
+    branch_name: str,
+    start_request_name: str,
+    verify_ssl: bool = True
+) -> List[Tuple[ApiRequest, Optional[ApiResponse], Optional[str]]]:
+    """
+    Execute a chain of requests with variable capture.
+
+    Requests are executed in dependency order. Variables captured
+    from earlier responses are available in later requests.
+    Execution stops on first error.
+
+    Args:
+        branch_name: Branch name
+        start_request_name: Name of the request to start the chain from
+        verify_ssl: Whether to verify SSL certificates
+
+    Returns:
+        List of (request, response, error) tuples for each execution
+    """
+    from ccc.api_environments import get_merged_variables
+
+    # Load all requests
+    requests_list, _ = load_requests(branch_name)
+
+    # Build execution chain
+    try:
+        chain = build_request_chain(requests_list, start_request_name)
+    except ValueError as e:
+        # Return error for chain building failure
+        req = get_request(branch_name, start_request_name)
+        if req:
+            return [(req, None, str(e))]
+        return []
+
+    # Track captured variables across the chain
+    captured_vars = {}
+
+    # Execute each request in order
+    results = []
+    for request in chain:
+        # Merge environment vars + captured vars
+        variables = get_merged_variables(branch_name, captured_vars)
+
+        # Execute request
+        response, error = execute_request(request, variables, verify_ssl)
+
+        # Update last executed time and save
+        if response:
+            request.update_last_executed()
+            update_request(branch_name, request)
+
+        # Add to history
+        execution = ApiRequestExecution(
+            request_name=request.name,
+            method=request.method.value,
+            url=request.url,
+            response=response,
+            error=error,
+        )
+        add_to_history(branch_name, execution)
+
+        # Store result
+        results.append((request, response, error))
+
+        # Stop on first error
+        if error or not response:
+            break
+
+        # Capture variables from response
+        if request.capture and response:
+            new_captures = capture_variables_from_response(response, request.capture)
+            captured_vars.update(new_captures)
+
+    return results

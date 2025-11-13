@@ -2,6 +2,7 @@
 API Request data structures for Command Center
 
 Defines the core data models for API testing functionality.
+Includes Phase 7 Enhancements: authentication, environments, and request chaining.
 """
 
 from dataclasses import dataclass, field, asdict
@@ -9,6 +10,7 @@ from typing import Optional, Dict, List, Any
 from datetime import datetime, timezone
 from enum import Enum
 import json
+import os
 
 
 class HttpMethod(Enum):
@@ -31,12 +33,184 @@ class HttpMethod(Enum):
 
 
 @dataclass
+class AuthConfig:
+    """
+    Authentication configuration for API requests.
+
+    Supports multiple authentication types:
+    - basic: HTTP Basic Authentication (username/password)
+    - bearer: Bearer token authentication
+    - api_key: API key in header or query parameter
+    """
+
+    type: str  # "basic", "bearer", "api_key"
+
+    # Basic auth fields
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    # Bearer token field
+    token: Optional[str] = None
+
+    # API key fields
+    key_name: Optional[str] = None  # Header name or query param name
+    key_value: Optional[str] = None  # The actual key value
+    location: Optional[str] = None  # "header" or "query"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for YAML storage."""
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AuthConfig':
+        """Load from dictionary (from YAML)."""
+        return cls(**data)
+
+
+@dataclass
+class CaptureRule:
+    """
+    Rule for capturing values from response.
+
+    Uses JSONPath expressions to extract values from JSON responses
+    and store them as variables for use in subsequent requests.
+    """
+
+    name: str  # Variable name to store captured value
+    jsonpath: str  # JSONPath expression to extract value
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for YAML storage."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CaptureRule':
+        """Load from dictionary (from YAML)."""
+        return cls(**data)
+
+
+@dataclass
+class Environment:
+    """
+    An environment with its variables.
+
+    Environments allow different configurations for dev, staging, prod, etc.
+    Variables can reference shell environment variables using {{VAR}} syntax.
+    """
+
+    name: str
+    variables: Dict[str, str] = field(default_factory=dict)
+
+    def get_resolved_variables(self) -> Dict[str, str]:
+        """
+        Get variables with environment variable substitution.
+
+        Resolves {{ENV_VAR}} references to shell environment variables.
+
+        Returns:
+            Dictionary with resolved variable values
+        """
+        resolved = {}
+        for key, value in self.variables.items():
+            # Support {{ENV_VAR}} syntax for environment variables
+            if value.startswith("{{") and value.endswith("}}"):
+                env_var_name = value[2:-2]
+                resolved[key] = os.environ.get(env_var_name, value)
+            else:
+                resolved[key] = value
+        return resolved
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for YAML storage."""
+        return {
+            "name": self.name,
+            "variables": self.variables,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Environment':
+        """Load from dictionary (from YAML)."""
+        return cls(
+            name=data["name"],
+            variables=data.get("variables", {}),
+        )
+
+
+@dataclass
+class EnvironmentStore:
+    """
+    Stores multiple environments and tracks current selection.
+
+    Manages switching between environments and retrieving
+    the current environment's variables.
+    """
+
+    current_environment: str = "dev"
+    environments: Dict[str, Environment] = field(default_factory=dict)
+
+    def get_current_variables(self) -> Dict[str, str]:
+        """
+        Get variables for the current environment.
+
+        Returns:
+            Dictionary of resolved variables for current environment
+        """
+        if self.current_environment in self.environments:
+            return self.environments[self.current_environment].get_resolved_variables()
+        return {}
+
+    def switch_environment(self, env_name: str) -> bool:
+        """
+        Switch to a different environment.
+
+        Args:
+            env_name: Name of environment to switch to
+
+        Returns:
+            True if switched successfully, False if environment doesn't exist
+        """
+        if env_name in self.environments:
+            self.current_environment = env_name
+            return True
+        return False
+
+    def add_environment(self, environment: Environment):
+        """Add or update an environment."""
+        self.environments[environment.name] = environment
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for YAML storage."""
+        return {
+            "current_environment": self.current_environment,
+            "environments": {name: env.to_dict() for name, env in self.environments.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'EnvironmentStore':
+        """Load from dictionary (from YAML)."""
+        envs = {}
+        for name, env_data in data.get("environments", {}).items():
+            env_data["name"] = name  # Ensure name is set
+            envs[name] = Environment.from_dict(env_data)
+
+        return cls(
+            current_environment=data.get("current_environment", "dev"),
+            environments=envs,
+        )
+
+
+@dataclass
 class ApiRequest:
     """
     Represents an API request.
 
     Stores all information needed to execute an HTTP request,
     including method, URL, headers, body, and validation criteria.
+
+    Phase 7 Enhancements add:
+    - Authentication support (auth field)
+    - Variable capture from responses (capture field)
+    - Request dependencies for chaining (depends_on field)
     """
 
     name: str
@@ -52,6 +226,11 @@ class ApiRequest:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_executed: Optional[datetime] = None
 
+    # Phase 7 Enhancements fields (all optional for backward compatibility)
+    auth: Optional[AuthConfig] = None
+    capture: List[CaptureRule] = field(default_factory=list)
+    depends_on: Optional[str] = None  # Name of request this depends on
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert to dictionary for YAML storage.
@@ -59,7 +238,7 @@ class ApiRequest:
         Returns:
             Dictionary representation suitable for YAML serialization
         """
-        return {
+        data = {
             "name": self.name,
             "method": self.method.value,
             "url": self.url,
@@ -71,6 +250,16 @@ class ApiRequest:
             "created_at": self.created_at.isoformat(),
             "last_executed": self.last_executed.isoformat() if self.last_executed else None,
         }
+
+        # Add Phase 7 Enhancements fields if present
+        if self.auth:
+            data["auth"] = self.auth.to_dict()
+        if self.capture:
+            data["capture"] = [rule.to_dict() for rule in self.capture]
+        if self.depends_on:
+            data["depends_on"] = self.depends_on
+
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ApiRequest':
@@ -93,6 +282,17 @@ class ApiRequest:
         created_at = datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(timezone.utc)
         last_executed = datetime.fromisoformat(data["last_executed"]) if data.get("last_executed") else None
 
+        # Parse Phase 7 Enhancements fields
+        auth = None
+        if "auth" in data and data["auth"]:
+            auth = AuthConfig.from_dict(data["auth"])
+
+        capture = []
+        if "capture" in data and data["capture"]:
+            capture = [CaptureRule.from_dict(rule) for rule in data["capture"]]
+
+        depends_on = data.get("depends_on")
+
         return cls(
             name=data["name"],
             method=method,
@@ -104,6 +304,9 @@ class ApiRequest:
             follow_redirects=data.get("follow_redirects", True),
             created_at=created_at,
             last_executed=last_executed,
+            auth=auth,
+            capture=capture,
+            depends_on=depends_on,
         )
 
     def needs_body(self) -> bool:
