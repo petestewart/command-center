@@ -267,6 +267,9 @@ class TicketDetailView(VerticalScroll):
         """Create child widgets."""
         with Container(id="detail-container"):
             yield Static("No ticket selected", id="ticket-header")
+            # Phase 6: Question notification banner
+            from ccc.tui.chat_widgets import QuestionNotificationBanner
+            yield QuestionNotificationBanner("", id="question-banner")
             yield AgentStatusPanel(id="agent-panel", classes="status-panel")
             yield GitStatusPanel(id="git-panel", classes="status-panel")
             yield BuildStatusPanel(id="build-panel", classes="status-panel")
@@ -301,6 +304,11 @@ class TicketDetailView(VerticalScroll):
         header.update(f"[bold]{display_id}{self.ticket.branch}[/bold]\n"
                      f"Title: {self.ticket.title}\n"
                      f"Worktree: {self.ticket.worktree_path}")
+
+        # Phase 6: Update question notification banner
+        from ccc.tui.chat_widgets import QuestionNotificationBanner
+        question_banner = self.query_one("#question-banner", QuestionNotificationBanner)
+        question_banner.branch_name = self.ticket.branch
 
         # Update all status panels - use branch (which is the primary ID)
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -338,6 +346,11 @@ class TicketDetailView(VerticalScroll):
 
         # Update status panels without forcing focus
         from ccc.tui.widgets import TodoListWidget
+        from ccc.tui.chat_widgets import QuestionNotificationBanner
+
+        # Phase 6: Refresh question notification banner
+        question_banner = self.query_one("#question-banner", QuestionNotificationBanner)
+        question_banner.update_count()
 
         # Update all status panels
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -426,6 +439,10 @@ class CommandCenterTUI(App):
         # Phase 3 Week 2: Tests & Files
         Binding("t", "test", "Test"),
         Binding("f", "files", "Files"),
+        # Phase 6: Chat & Questions
+        Binding("i", "interactive_chat", "Chat"),
+        Binding("R", "reply_question", "Reply"),
+        Binding("v", "plan_review", "Plan Review"),
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
     ]
@@ -1057,6 +1074,91 @@ class CommandCenterTUI(App):
         # For now, just show a notification that move is not yet implemented
         # In a full implementation, you'd show a dialog to get the new position
         self.notify("Move todo: Use CLI 'ccc todo move' for now", severity="information")
+
+    # Phase 6: Chat and Question actions
+
+    def action_interactive_chat(self):
+        """Open interactive chat with Claude"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Verify CLI is available
+        from ccc.claude_chat import create_chat
+
+        chat = create_chat(ticket.branch)
+        is_available, error = chat.verify_cli()
+
+        if not is_available:
+            from ccc.tui.dialogs import ErrorDialog
+            self.push_screen(
+                ErrorDialog("Claude CLI Not Available", error)
+            )
+            return
+
+        # Open chat view
+        from ccc.tui.chat_widgets import ChatView
+        self.push_screen(ChatView(ticket.branch))
+
+    def action_reply_question(self):
+        """Reply to the first unanswered question"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        from ccc.questions import QuestionManager
+
+        manager = QuestionManager(ticket.branch)
+        unanswered = manager.get_unanswered()
+
+        if not unanswered:
+            self.notify("No unanswered questions", severity="information")
+            return
+
+        # Show first unanswered question
+        question = unanswered[0]
+
+        from ccc.tui.chat_dialogs import ReplyToQuestionDialog
+
+        def on_reply_complete(result):
+            if result and result.get("success"):
+                self.notify(
+                    f"Answered question from {question.agent_id}",
+                    severity="information"
+                )
+                # Refresh to update question notification
+                self.action_refresh()
+
+        self.push_screen(
+            ReplyToQuestionDialog(ticket.branch, question),
+            on_reply_complete
+        )
+
+    def action_plan_review(self):
+        """Show plan review from Claude"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Verify CLI is available
+        from ccc.claude_chat import create_chat
+
+        chat = create_chat(ticket.branch)
+        is_available, error = chat.verify_cli()
+
+        if not is_available:
+            from ccc.tui.dialogs import ErrorDialog
+            self.push_screen(
+                ErrorDialog("Claude CLI Not Available", error)
+            )
+            return
+
+        # Open plan review view
+        from ccc.tui.chat_widgets import PlanReviewView
+        self.push_screen(PlanReviewView(ticket.branch))
 
 
 def run_tui():

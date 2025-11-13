@@ -1560,6 +1560,335 @@ def todo_edit(branch_name: str, task_id: int, description: str):
         sys.exit(1)
 
 
+@cli.group()
+def chat():
+    """Chat with Claude about branches (Phase 6)."""
+    pass
+
+
+@chat.command("send")
+@click.argument("branch_name")
+@click.argument("message")
+def chat_send(branch_name: str, message: str):
+    """
+    Send a message to Claude about a branch.
+
+    \b
+    Examples:
+        ccc chat send feature/IN-413 "Should I use Zod or Joi for validation?"
+        ccc chat send bugfix/auth "How should I approach fixing this bug?"
+    """
+    from ccc.claude_chat import create_chat
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Create chat instance
+    chat_instance = create_chat(branch_name)
+
+    # Verify CLI
+    is_available, error = chat_instance.verify_cli()
+    if not is_available:
+        print_error(error)
+        sys.exit(1)
+
+    # Send message
+    print_info("Sending message to Claude...")
+    response, error = chat_instance.send_message(message)
+
+    if error:
+        print_error(f"Failed to get response: {error}")
+        sys.exit(1)
+
+    # Display response
+    console.print(f"\n[bold green]Claude:[/bold green]\n")
+    console.print(response)
+    console.print()
+
+
+@chat.command("history")
+@click.argument("branch_name")
+@click.option("--limit", "-n", type=int, default=20, help="Number of messages to show")
+def chat_history(branch_name: str, limit: int):
+    """
+    View chat history for a branch.
+
+    \b
+    Examples:
+        ccc chat history feature/IN-413
+        ccc chat history feature/IN-413 --limit 50
+    """
+    from ccc.claude_chat import create_chat
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Load chat history
+    chat_instance = create_chat(branch_name)
+    messages = chat_instance.get_history(limit=limit)
+
+    if not messages:
+        print_info(f"No chat history for branch '{branch_name}'")
+        return
+
+    # Display messages
+    console.print(f"\n[bold]Chat History: {branch_name}[/bold]")
+    console.print(f"[dim]Showing {len(messages)} message(s)[/dim]\n")
+
+    for msg in messages:
+        time_str = format_time_ago(msg.timestamp)
+        if msg.role == "user":
+            console.print(f"[bold cyan]You[/bold cyan] [dim]({time_str})[/dim]")
+        else:
+            console.print(f"[bold green]Claude[/bold green] [dim]({time_str})[/dim]")
+
+        console.print(msg.content)
+        console.print()
+
+
+@chat.command("clear")
+@click.argument("branch_name")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def chat_clear(branch_name: str, force: bool):
+    """
+    Clear chat history for a branch.
+
+    \b
+    Examples:
+        ccc chat clear feature/IN-413
+    """
+    from ccc.claude_chat import create_chat
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Confirm
+    if not force and not confirm(f"Clear all chat history for '{branch_name}'?"):
+        print_info("Cancelled")
+        return
+
+    # Clear history
+    chat_instance = create_chat(branch_name)
+    chat_instance.clear_history()
+
+    print_success(f"Cleared chat history for '{branch_name}'")
+
+
+@cli.group()
+def plan():
+    """Manage and review development plans (Phase 6)."""
+    pass
+
+
+@plan.command("review")
+@click.argument("branch_name")
+@click.option("--context", "-c", help="Additional context for Claude")
+def plan_review(branch_name: str, context: Optional[str]):
+    """
+    Ask Claude to review and suggest improvements to the plan.
+
+    \b
+    Examples:
+        ccc plan review feature/IN-413
+        ccc plan review feature/IN-413 --context "Focus on security"
+    """
+    from ccc.plan_reviser import get_plan_reviser
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Get plan reviser
+    reviser = get_plan_reviser(branch_name)
+
+    # Verify CLI
+    is_available, error = reviser.chat.verify_cli()
+    if not is_available:
+        print_error(error)
+        sys.exit(1)
+
+    # Get suggestions
+    print_info("Requesting plan review from Claude...")
+    suggestions, error = reviser.suggest_improvements(additional_context=context)
+
+    if error:
+        print_error(f"Failed to get suggestions: {error}")
+        sys.exit(1)
+
+    if not suggestions:
+        print_warning("No suggestions from Claude")
+        return
+
+    # Display suggestions
+    console.print(f"\n[bold]Plan Review: {branch_name}[/bold]")
+    console.print(f"[dim]Received {len(suggestions)} suggestion(s)[/dim]\n")
+
+    for i, suggestion in enumerate(suggestions, 1):
+        console.print(f"[bold cyan]{i}.[/bold cyan] {suggestion.description}")
+        if suggestion.details:
+            console.print(f"   [dim]{suggestion.details}[/dim]")
+        console.print()
+
+
+@plan.command("next")
+@click.argument("branch_name")
+def plan_next(branch_name: str):
+    """
+    Ask Claude what to work on next.
+
+    \b
+    Examples:
+        ccc plan next feature/IN-413
+    """
+    from ccc.plan_reviser import get_plan_reviser
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Get plan reviser
+    reviser = get_plan_reviser(branch_name)
+
+    # Get suggestion
+    print_info("Asking Claude for next steps...")
+    suggestion, error = reviser.suggest_next_steps()
+
+    if error:
+        print_error(f"Failed to get suggestion: {error}")
+        sys.exit(1)
+
+    # Display suggestion
+    console.print(f"\n[bold green]Claude's recommendation:[/bold green]\n")
+    console.print(suggestion)
+    console.print()
+
+
+@cli.group()
+def question():
+    """Manage agent questions (Phase 6)."""
+    pass
+
+
+@question.command("list")
+@click.argument("branch_name")
+@click.option("--all", "-a", is_flag=True, help="Show all questions (including answered)")
+def question_list(branch_name: str, all: bool):
+    """
+    List questions for a branch.
+
+    \b
+    Examples:
+        ccc question list feature/IN-413
+        ccc question list feature/IN-413 --all
+    """
+    from ccc.questions import QuestionManager
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Get questions
+    manager = QuestionManager(branch_name)
+
+    if all:
+        questions = manager.get_all()
+        title = "All Questions"
+    else:
+        questions = manager.get_unanswered()
+        title = "Unanswered Questions"
+
+    if not questions:
+        print_info(f"No {title.lower()} for branch '{branch_name}'")
+        return
+
+    # Display questions
+    console.print(f"\n[bold]{title}: {branch_name}[/bold]")
+    console.print(f"[dim]{len(questions)} question(s)[/dim]\n")
+
+    for q in questions:
+        time_str = format_time_ago(q.timestamp)
+        status = "[green]✓ Answered[/green]" if q.answered else "[yellow]⚠ Unanswered[/yellow]"
+
+        console.print(f"[bold]{q.agent_id}[/bold] [dim]({time_str})[/dim] {status}")
+        console.print(f"ID: {q.id}")
+        console.print(f"Q: {q.question}")
+
+        if q.answered and q.answer:
+            console.print(f"A: [green]{q.answer}[/green]")
+
+        console.print()
+
+
+@question.command("reply")
+@click.argument("branch_name")
+@click.argument("question_id")
+@click.argument("answer")
+def question_reply(branch_name: str, question_id: str, answer: str):
+    """
+    Reply to an agent question.
+
+    \b
+    Examples:
+        ccc question reply feature/IN-413 <question-id> "Use Zod for better TypeScript support"
+    """
+    from ccc.questions import QuestionManager
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Answer question
+    manager = QuestionManager(branch_name)
+    question = manager.answer_question(question_id, answer)
+
+    if not question:
+        print_error(f"Question '{question_id}' not found")
+        sys.exit(1)
+
+    print_success(f"Replied to question from {question.agent_id}")
+    print_info(f"Q: {question.question}")
+    print_info(f"A: {answer}")
+
+
+@question.command("dismiss")
+@click.argument("branch_name")
+@click.argument("question_id")
+def question_dismiss(branch_name: str, question_id: str):
+    """
+    Dismiss a question without answering.
+
+    \b
+    Examples:
+        ccc question dismiss feature/IN-413 <question-id>
+    """
+    from ccc.questions import QuestionManager
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Dismiss question
+    manager = QuestionManager(branch_name)
+    success = manager.dismiss_question(question_id)
+
+    if not success:
+        print_error(f"Question '{question_id}' not found")
+        sys.exit(1)
+
+    print_success(f"Dismissed question '{question_id}'")
+
+
 def _get_status_color(status: str) -> str:
     """Get color for status display."""
     colors = {

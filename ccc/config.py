@@ -56,6 +56,14 @@ class Config:
     todos_max_display: int = 10
     todos_estimate_in_hours: bool = False
 
+    # Phase 6: Claude CLI & Communication settings
+    claude_cli_path: str = "claude"  # Path to claude CLI binary
+    claude_timeout: int = 30  # Timeout in seconds for Claude responses
+    chat_history_limit: int = 50  # Max messages to keep in history
+    chat_context_window: int = 10  # Recent messages to include in context
+    questions_notification_style: str = "banner"  # "banner", "toast", "silent"
+    questions_auto_dismiss: int = 3600  # Auto-dismiss questions after N seconds
+
     # Phase 7: API Testing settings
     api_default_timeout: int = 30
     api_follow_redirects: bool = True
@@ -245,6 +253,24 @@ def load_config() -> Config:
             ),
             todos_estimate_in_hours=data.get(
                 "todos_estimate_in_hours", Config.todos_estimate_in_hours
+            ),
+            claude_cli_path=data.get(
+                "claude_cli_path", Config.claude_cli_path
+            ),
+            claude_timeout=data.get(
+                "claude_timeout", Config.claude_timeout
+            ),
+            chat_history_limit=data.get(
+                "chat_history_limit", Config.chat_history_limit
+            ),
+            chat_context_window=data.get(
+                "chat_context_window", Config.chat_context_window
+            ),
+            questions_notification_style=data.get(
+                "questions_notification_style", Config.questions_notification_style
+            ),
+            questions_auto_dismiss=data.get(
+                "questions_auto_dismiss", Config.questions_auto_dismiss
             ),
             api_default_timeout=data.get(
                 "api_default_timeout", Config.api_default_timeout
