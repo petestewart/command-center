@@ -271,7 +271,10 @@ class TicketDetailView(VerticalScroll):
             yield GitStatusPanel(id="git-panel", classes="status-panel")
             yield BuildStatusPanel(id="build-panel", classes="status-panel")
             yield TestStatusPanel(id="test-panel", classes="status-panel")
-            # Phase 7: API Testing panel
+            # Phase 4: Add todo panel
+            from ccc.tui.widgets import TodoListWidget
+            yield TodoListWidget("", id="todo-panel", classes="status-panel")
+            # Phase 7: Add API request panel
             from ccc.tui.api_widgets import ApiRequestListPanel
             yield ApiRequestListPanel(branch_name="", id="api-panel", classes="status-panel")
 
@@ -313,6 +316,15 @@ class TicketDetailView(VerticalScroll):
         test_panel = self.query_one("#test-panel", TestStatusPanel)
         test_panel.branch_name = self.ticket.branch
 
+        # Phase 4: Update todo panel
+        from ccc.tui.widgets import TodoListWidget
+        todo_panel = self.query_one("#todo-panel", TodoListWidget)
+        todo_panel.branch_name = self.ticket.branch
+        todo_panel.refresh_content()
+        # Auto-focus the todo panel so user can immediately navigate
+        # Only focus on initial load, not on refresh
+        todo_panel.focus()
+
         # Phase 7: Update API panel
         from ccc.tui.api_widgets import ApiRequestListPanel
         api_panel = self.query_one("#api-panel", ApiRequestListPanel)
@@ -321,7 +333,37 @@ class TicketDetailView(VerticalScroll):
 
     def refresh_status(self):
         """Manually refresh all status panels."""
-        self.update_panels()
+        # Call update_panels but don't pass focus_on_load flag
+        # This is called by auto_refresh timer, so we don't want to steal focus
+        if not self.ticket:
+            self.update_panels()
+            return
+
+        # Update status panels without forcing focus
+        from ccc.tui.widgets import TodoListWidget
+
+        # Update all status panels
+        agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
+        agent_panel.branch_name = self.ticket.branch
+
+        git_panel = self.query_one("#git-panel", GitStatusPanel)
+        git_panel.branch_name = self.ticket.branch
+        git_panel.worktree_path = self.ticket.worktree_path
+
+        build_panel = self.query_one("#build-panel", BuildStatusPanel)
+        build_panel.branch_name = self.ticket.branch
+
+        test_panel = self.query_one("#test-panel", TestStatusPanel)
+        test_panel.branch_name = self.ticket.branch
+
+        # Refresh todo panel content only, don't refocus
+        todo_panel = self.query_one("#todo-panel", TodoListWidget)
+        todo_panel.refresh_content()
+
+        # Phase 7: Refresh API panel
+        from ccc.tui.api_widgets import ApiRequestListPanel
+        api_panel = self.query_one("#api-panel", ApiRequestListPanel)
+        api_panel.refresh_requests()
 
 
 class CommandCenterTUI(App):
@@ -343,6 +385,7 @@ class CommandCenterTUI(App):
         height: 100%;
         border: solid $primary;
         padding: 1;
+        overflow: auto;
     }
 
     DataTable {
@@ -352,8 +395,10 @@ class CommandCenterTUI(App):
     .status-panel {
         border: solid $accent;
         height: auto;
+        max-height: 12;
         margin: 1 0;
         padding: 1;
+        overflow: auto;
     }
 
     .status-panel:focus {
@@ -365,6 +410,7 @@ class CommandCenterTUI(App):
         margin-bottom: 1;
         padding: 1;
         background: $boost;
+        height: auto;
     }
     """
 
@@ -412,7 +458,7 @@ class CommandCenterTUI(App):
 
         # Setup ticket table
         table = self.query_one("#ticket-table", DataTable)
-        table.add_columns("ID", "Branch", "Title", "Status", "Updated")
+        table.add_columns("ID", "Branch", "Title", "Progress", "Status", "Updated")
         table.cursor_type = "row"
         table.zebra_stripes = True
 
@@ -441,10 +487,21 @@ class CommandCenterTUI(App):
             else:
                 status_text = ticket.status
 
+            # Phase 4: Get todo progress
+            from ccc.todo import list_todos
+            todo_list = list_todos(ticket.branch)
+            if todo_list.items:
+                stats = todo_list.progress_stats()
+                percentage = todo_list.progress_percentage()
+                progress_text = f"{stats['done']}/{stats['total']} ({percentage:.0f}%)"
+            else:
+                progress_text = "-"
+
             table.add_row(
                 display_id,
                 ticket.branch[:25],
                 ticket.title[:25],
+                progress_text,
                 status_text,
                 format_time_ago(ticket.updated_at),
                 key=ticket.branch,
@@ -783,6 +840,191 @@ class CommandCenterTUI(App):
             RequestBuilderDialog(ticket.branch),
             on_request_saved
         )
+
+    # Phase 4: Todo management actions
+
+    def on_todo_list_widget_todo_action(self, message):
+        """Handle todo actions from TodoListWidget."""
+        from ccc.tui.widgets import TodoListWidget
+
+        action = message.action
+        task_id = message.task_id
+
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        if action == "add":
+            self._handle_add_todo(ticket)
+        elif action == "edit":
+            self._handle_edit_todo(ticket, task_id)
+        elif action == "delete":
+            self._handle_delete_todo(ticket, task_id)
+        elif action == "assign":
+            self._handle_assign_todo(ticket, task_id)
+        elif action == "block":
+            self._handle_block_todo(ticket, task_id)
+        elif action == "move":
+            self._handle_move_todo(ticket, task_id)
+
+    def _handle_add_todo(self, ticket: Ticket):
+        """Handle adding a new todo."""
+        from ccc.tui.dialogs import AddTodoDialog
+
+        def on_result(result):
+            if result:
+                from ccc.todo import add_todo
+
+                try:
+                    item = add_todo(
+                        ticket.branch,
+                        result["description"],
+                        estimated_minutes=result.get("estimate"),
+                        assigned_agent=result.get("assign"),
+                    )
+                    self.notify(f"Added todo #{item.id}", severity="information")
+                    self.action_refresh()
+                except Exception as e:
+                    self.notify(f"Error adding todo: {e}", severity="error")
+
+        self.push_screen(AddTodoDialog(ticket.branch), on_result)
+
+    def _handle_edit_todo(self, ticket: Ticket, task_id: int):
+        """Handle editing a todo."""
+        from ccc.tui.dialogs import EditTodoDialog
+        from ccc.todo import list_todos, update_todo_description
+
+        # Get current description
+        todo_list = list_todos(ticket.branch)
+        item = todo_list.get_item(task_id)
+        if not item:
+            self.notify(f"Todo #{task_id} not found", severity="warning")
+            return
+
+        def on_result(result):
+            if result:
+                try:
+                    update_todo_description(
+                        ticket.branch,
+                        result["task_id"],
+                        result["description"],
+                    )
+                    self.notify(f"Updated todo #{task_id}", severity="information")
+                    self.action_refresh()
+                except Exception as e:
+                    self.notify(f"Error updating todo: {e}", severity="error")
+
+        self.push_screen(
+            EditTodoDialog(ticket.branch, task_id, item.description),
+            on_result
+        )
+
+    def _handle_delete_todo(self, ticket: Ticket, task_id: int):
+        """Handle deleting a todo."""
+        from ccc.tui.dialogs import ConfirmDialog
+        from ccc.todo import delete_todo
+
+        def on_confirm(confirmed: bool):
+            if confirmed:
+                try:
+                    if delete_todo(ticket.branch, task_id):
+                        self.notify(f"Deleted todo #{task_id}", severity="information")
+                        self.action_refresh()
+                    else:
+                        self.notify(f"Todo #{task_id} not found", severity="warning")
+                except Exception as e:
+                    self.notify(f"Error deleting todo: {e}", severity="error")
+
+        self.push_screen(
+            ConfirmDialog(
+                "Delete Todo",
+                f"Are you sure you want to delete todo #{task_id}?",
+            ),
+            on_confirm
+        )
+
+    def _handle_assign_todo(self, ticket: Ticket, task_id: int):
+        """Handle assigning a todo."""
+        from ccc.tui.dialogs import AssignTodoDialog
+        from ccc.todo import list_todos, assign_todo
+
+        # Get current assignment
+        todo_list = list_todos(ticket.branch)
+        item = todo_list.get_item(task_id)
+        if not item:
+            self.notify(f"Todo #{task_id} not found", severity="warning")
+            return
+
+        def on_result(result):
+            if result:
+                try:
+                    assign_todo(
+                        ticket.branch,
+                        result["task_id"],
+                        result["agent"],
+                    )
+                    if result["agent"]:
+                        self.notify(
+                            f"Assigned todo #{task_id} to {result['agent']}",
+                            severity="information"
+                        )
+                    else:
+                        self.notify(f"Unassigned todo #{task_id}", severity="information")
+                    self.action_refresh()
+                except Exception as e:
+                    self.notify(f"Error assigning todo: {e}", severity="error")
+
+        self.push_screen(
+            AssignTodoDialog(task_id, item.assigned_agent),
+            on_result
+        )
+
+    def _handle_block_todo(self, ticket: Ticket, task_id: int):
+        """Handle setting a todo as blocked."""
+        from ccc.tui.dialogs import BlockTodoDialog
+        from ccc.todo import list_todos, set_blocked_by
+
+        # Get current blocking status
+        todo_list = list_todos(ticket.branch)
+        item = todo_list.get_item(task_id)
+        if not item:
+            self.notify(f"Todo #{task_id} not found", severity="warning")
+            return
+
+        def on_result(result):
+            if result:
+                try:
+                    set_blocked_by(
+                        ticket.branch,
+                        result["task_id"],
+                        result["blocked_by"],
+                    )
+                    if result["blocked_by"]:
+                        self.notify(
+                            f"Todo #{task_id} blocked by #{result['blocked_by']}",
+                            severity="information"
+                        )
+                    else:
+                        self.notify(f"Unblocked todo #{task_id}", severity="information")
+                    self.action_refresh()
+                except ValueError as e:
+                    self.notify(f"Error: {e}", severity="error")
+                except Exception as e:
+                    self.notify(f"Error blocking todo: {e}", severity="error")
+
+        self.push_screen(
+            BlockTodoDialog(task_id, item.blocked_by),
+            on_result
+        )
+
+    def _handle_move_todo(self, ticket: Ticket, task_id: int):
+        """Handle moving a todo to a new position."""
+        from ccc.todo import list_todos, move_todo
+
+        # For now, just show a notification that move is not yet implemented
+        # In a full implementation, you'd show a dialog to get the new position
+        self.notify("Move todo: Use CLI 'ccc todo move' for now", severity="information")
 
 
 def run_tui():

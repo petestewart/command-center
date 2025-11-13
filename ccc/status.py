@@ -20,6 +20,7 @@ class AgentStatus:
     branch_name: str
     status: str  # "idle", "working", "complete", "blocked", "error"
     current_task: Optional[str] = None
+    current_task_id: Optional[int] = None  # Phase 4: Links to TodoItem.id
     last_update: Optional[datetime] = None
     questions: list = None
     blocked: bool = False

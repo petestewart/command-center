@@ -50,6 +50,12 @@ class Config:
     # Editor configuration (falls back to $EDITOR env var, then vim)
     editor: Optional[str] = None
 
+    # Phase 4: Todo configuration
+    todos_auto_assign_first_task: bool = True
+    todos_show_completed: bool = True
+    todos_max_display: int = 10
+    todos_estimate_in_hours: bool = False
+
     # Phase 7: API Testing settings
     api_default_timeout: int = 30
     api_follow_redirects: bool = True
@@ -228,10 +234,30 @@ def load_config() -> Config:
             project_commands=data.get("project_commands"),
             diff_viewer=data.get("diff_viewer", Config.diff_viewer),
             editor=data.get("editor"),
-            api_default_timeout=data.get("api_default_timeout", Config.api_default_timeout),
-            api_follow_redirects=data.get("api_follow_redirects", Config.api_follow_redirects),
-            api_max_history_entries=data.get("api_max_history_entries", Config.api_max_history_entries),
-            api_verify_ssl=data.get("api_verify_ssl", Config.api_verify_ssl),
+            todos_auto_assign_first_task=data.get(
+                "todos_auto_assign_first_task", Config.todos_auto_assign_first_task
+            ),
+            todos_show_completed=data.get(
+                "todos_show_completed", Config.todos_show_completed
+            ),
+            todos_max_display=data.get(
+                "todos_max_display", Config.todos_max_display
+            ),
+            todos_estimate_in_hours=data.get(
+                "todos_estimate_in_hours", Config.todos_estimate_in_hours
+            ),
+            api_default_timeout=data.get(
+                "api_default_timeout", Config.api_default_timeout
+            ),
+            api_follow_redirects=data.get(
+                "api_follow_redirects", Config.api_follow_redirects
+            ),
+            api_max_history_entries=data.get(
+                "api_max_history_entries", Config.api_max_history_entries
+            ),
+            api_verify_ssl=data.get(
+                "api_verify_ssl", Config.api_verify_ssl
+            ),
         )
 
         return config

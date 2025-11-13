@@ -978,3 +978,459 @@ class FileBrowserDialog(BaseDialog):
             self.action_open_editor()
         else:
             self.dismiss(None)
+
+
+class AddTodoDialog(BaseDialog):
+    """
+    Dialog for adding a new todo item.
+
+    Example:
+        def on_todo_added(result: Optional[dict]) -> None:
+            if result:
+                # User added a new todo
+                description = result["description"]
+                ...
+
+        self.push_screen(
+            AddTodoDialog(branch_name),
+            on_todo_added
+        )
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Cancel", show=False),
+        Binding("ctrl+s", "save", "Save", show=False),
+        Binding("enter", "save", "Create", show=False),
+    ]
+
+    CSS = """
+    AddTodoDialog > Container {
+        max-width: 80;
+        width: 70;
+    }
+
+    AddTodoDialog .input-group {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    AddTodoDialog .input-label {
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+
+    AddTodoDialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    AddTodoDialog TextArea {
+        width: 100%;
+        height: 5;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        branch_name: str,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+    ) -> None:
+        """
+        Initialize the add todo dialog.
+
+        Args:
+            branch_name: Branch to add todo to
+            name: The name of the dialog
+            id: The ID of the dialog in the DOM
+            classes: The CSS classes for the dialog
+        """
+        super().__init__(
+            title="Add New Todo",
+            name=name,
+            id=id,
+            classes=classes,
+        )
+        self.branch_name = branch_name
+
+    def compose_content(self) -> ComposeResult:
+        """Create the dialog content."""
+        from textual.widgets import Input, TextArea
+
+        with Vertical(classes="input-group"):
+            yield Label("Description:", classes="input-label")
+            yield Input(placeholder="Enter todo description...", id="description")
+
+        with Vertical(classes="input-group"):
+            yield Label("Estimated minutes (optional):", classes="input-label")
+            yield Input(placeholder="e.g., 30", id="estimate", type="integer")
+
+        with Vertical(classes="input-group"):
+            yield Label("Assign to agent (optional):", classes="input-label")
+            yield Input(placeholder="e.g., agent-1", id="assign")
+
+    def compose_buttons(self) -> ComposeResult:
+        """Add Create/Cancel buttons."""
+        with Horizontal(classes="dialog-buttons"):
+            yield Button("Create", variant="primary", id="create")
+            yield Button("Cancel", variant="default", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "create":
+            self.action_save()
+        else:
+            self.action_dismiss()
+
+    def on_input_submitted(self, event) -> None:
+        """Handle Enter key in input fields."""
+        # When user presses Enter in any input field, save the todo
+        self.action_save()
+
+    def action_save(self) -> None:
+        """Save the new todo."""
+        from textual.widgets import Input
+
+        description_input = self.query_one("#description", Input)
+        description = description_input.value.strip()
+
+        if not description:
+            # Show error - description is required
+            return
+
+        estimate_input = self.query_one("#estimate", Input)
+        assign_input = self.query_one("#assign", Input)
+
+        try:
+            estimate = int(estimate_input.value) if estimate_input.value else None
+        except ValueError:
+            estimate = None
+
+        assign = assign_input.value.strip() if assign_input.value else None
+
+        self.dismiss({
+            "description": description,
+            "estimate": estimate,
+            "assign": assign,
+        })
+
+
+class EditTodoDialog(BaseDialog):
+    """
+    Dialog for editing an existing todo item.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Cancel", show=False),
+        Binding("ctrl+s", "save", "Save", show=False),
+    ]
+
+    CSS = """
+    EditTodoDialog > Container {
+        max-width: 80;
+        width: 70;
+    }
+
+    EditTodoDialog .input-group {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    EditTodoDialog .input-label {
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+
+    EditTodoDialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        branch_name: str,
+        task_id: int,
+        current_description: str,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+    ) -> None:
+        """
+        Initialize the edit todo dialog.
+
+        Args:
+            branch_name: Branch name
+            task_id: Task ID to edit
+            current_description: Current description
+            name: The name of the dialog
+            id: The ID of the dialog in the DOM
+            classes: The CSS classes for the dialog
+        """
+        super().__init__(
+            title=f"Edit Todo #{task_id}",
+            name=name,
+            id=id,
+            classes=classes,
+        )
+        self.branch_name = branch_name
+        self.task_id = task_id
+        self.current_description = current_description
+
+    def compose_content(self) -> ComposeResult:
+        """Create the dialog content."""
+        from textual.widgets import Input
+
+        with Vertical(classes="input-group"):
+            yield Label("Description:", classes="input-label")
+            description_input = Input(
+                value=self.current_description,
+                id="description"
+            )
+            yield description_input
+
+    def compose_buttons(self) -> ComposeResult:
+        """Add Save/Cancel buttons."""
+        with Horizontal(classes="dialog-buttons"):
+            yield Button("Save", variant="primary", id="save")
+            yield Button("Cancel", variant="default", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "save":
+            self.action_save()
+        else:
+            self.action_dismiss()
+
+    def action_save(self) -> None:
+        """Save the edited todo."""
+        from textual.widgets import Input
+
+        description_input = self.query_one("#description", Input)
+        description = description_input.value.strip()
+
+        if not description:
+            return
+
+        self.dismiss({
+            "task_id": self.task_id,
+            "description": description,
+        })
+
+
+class AssignTodoDialog(BaseDialog):
+    """
+    Dialog for assigning a todo to an agent.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Cancel", show=False),
+    ]
+
+    CSS = """
+    AssignTodoDialog > Container {
+        max-width: 60;
+        width: 50;
+    }
+
+    AssignTodoDialog .input-label {
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+
+    AssignTodoDialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        task_id: int,
+        current_agent: Optional[str] = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+    ) -> None:
+        """
+        Initialize the assign todo dialog.
+
+        Args:
+            task_id: Task ID
+            current_agent: Currently assigned agent (if any)
+            name: The name of the dialog
+            id: The ID of the dialog in the DOM
+            classes: The CSS classes for the dialog
+        """
+        super().__init__(
+            title=f"Assign Todo #{task_id}",
+            name=name,
+            id=id,
+            classes=classes,
+        )
+        self.task_id = task_id
+        self.current_agent = current_agent
+
+    def compose_content(self) -> ComposeResult:
+        """Create the dialog content."""
+        from textual.widgets import Input
+
+        yield Label("Agent name:", classes="input-label")
+        agent_input = Input(
+            value=self.current_agent or "",
+            placeholder="Enter agent name (e.g., agent-1)",
+            id="agent"
+        )
+        yield agent_input
+
+        if self.current_agent:
+            yield Static(
+                "[dim]Leave empty to unassign[/dim]",
+                classes="input-label"
+            )
+
+    def compose_buttons(self) -> ComposeResult:
+        """Add Assign/Cancel buttons."""
+        with Horizontal(classes="dialog-buttons"):
+            yield Button("Assign", variant="primary", id="assign")
+            yield Button("Cancel", variant="default", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "assign":
+            self.action_assign()
+        else:
+            self.action_dismiss()
+
+    def action_assign(self) -> None:
+        """Assign the todo."""
+        from textual.widgets import Input
+
+        agent_input = self.query_one("#agent", Input)
+        agent = agent_input.value.strip() or None
+
+        self.dismiss({
+            "task_id": self.task_id,
+            "agent": agent,
+        })
+
+
+class BlockTodoDialog(BaseDialog):
+    """
+    Dialog for setting a todo as blocked by another todo.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Cancel", show=False),
+    ]
+
+    CSS = """
+    BlockTodoDialog > Container {
+        max-width: 60;
+        width: 50;
+    }
+
+    BlockTodoDialog .input-label {
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+
+    BlockTodoDialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    BlockTodoDialog .help-text {
+        width: 100%;
+        color: $text-muted;
+        margin-top: 0;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        task_id: int,
+        current_blocked_by: Optional[int] = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+    ) -> None:
+        """
+        Initialize the block todo dialog.
+
+        Args:
+            task_id: Task ID
+            current_blocked_by: Currently blocking task ID (if any)
+            name: The name of the dialog
+            id: The ID of the dialog in the DOM
+            classes: The CSS classes for the dialog
+        """
+        super().__init__(
+            title=f"Block Todo #{task_id}",
+            name=name,
+            id=id,
+            classes=classes,
+        )
+        self.task_id = task_id
+        self.current_blocked_by = current_blocked_by
+
+    def compose_content(self) -> ComposeResult:
+        """Create the dialog content."""
+        from textual.widgets import Input
+
+        yield Static(
+            "This task will be blocked until another task is completed.",
+            classes="help-text"
+        )
+
+        yield Label("Blocking task ID:", classes="input-label")
+        blocked_input = Input(
+            value=str(self.current_blocked_by) if self.current_blocked_by else "",
+            placeholder="Enter task ID that blocks this task",
+            id="blocked_by",
+            type="integer"
+        )
+        yield blocked_input
+
+        if self.current_blocked_by:
+            yield Static(
+                "[dim]Leave empty to unblock[/dim]",
+                classes="help-text"
+            )
+
+    def compose_buttons(self) -> ComposeResult:
+        """Add Block/Cancel buttons."""
+        with Horizontal(classes="dialog-buttons"):
+            yield Button("Set Blocking", variant="primary", id="block")
+            yield Button("Cancel", variant="default", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "block":
+            self.action_block()
+        else:
+            self.action_dismiss()
+
+    def action_block(self) -> None:
+        """Set the blocking dependency."""
+        from textual.widgets import Input
+
+        blocked_input = self.query_one("#blocked_by", Input)
+
+        try:
+            blocked_by = int(blocked_input.value) if blocked_input.value else None
+        except ValueError:
+            # Invalid input
+            return
+
+        self.dismiss({
+            "task_id": self.task_id,
+            "blocked_by": blocked_by,
+        })
