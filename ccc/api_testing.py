@@ -30,7 +30,7 @@ def get_api_requests_path(branch_name: str) -> Path:
     Returns:
         Path to api-requests.yaml
     """
-    from ccc.ticket import get_branch_dir
+    from ccc.utils import get_branch_dir
     return get_branch_dir(branch_name) / "api-requests.yaml"
 
 
@@ -44,7 +44,7 @@ def get_api_history_path(branch_name: str) -> Path:
     Returns:
         Path to api-history.yaml
     """
-    from ccc.ticket import get_branch_dir
+    from ccc.utils import get_branch_dir
     return get_branch_dir(branch_name) / "api-history.yaml"
 
 

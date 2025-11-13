@@ -50,6 +50,13 @@ class RequestBuilderDialog(ModalScreen):
         background: $surface;
         border: thick $primary;
         padding: 1 2;
+        layout: vertical;
+    }
+
+    RequestBuilderDialog .form-content {
+        width: 100%;
+        height: 1fr;
+        overflow: auto;
     }
 
     RequestBuilderDialog .dialog-title {
@@ -77,7 +84,7 @@ class RequestBuilderDialog(ModalScreen):
 
     RequestBuilderDialog TextArea {
         width: 100%;
-        height: 8;
+        height: 6;
         border: solid $primary-lighten-1;
         margin-bottom: 1;
     }
@@ -88,6 +95,8 @@ class RequestBuilderDialog(ModalScreen):
         align: center middle;
         layout: horizontal;
         margin-top: 1;
+        border-top: solid $primary-lighten-1;
+        padding-top: 1;
     }
 
     RequestBuilderDialog Button {
@@ -140,52 +149,53 @@ class RequestBuilderDialog(ModalScreen):
             title = "Edit API Request" if self.is_edit else "New API Request"
             yield Label(title, classes="dialog-title")
 
-            yield Label("Name:")
-            name_input = Input(
-                placeholder="Request name",
-                value=self.request.name if self.request else "",
-                id="name-input"
-            )
-            name_input.disabled = self.is_edit  # Can't rename existing requests
-            yield name_input
+            with VerticalScroll(classes="form-content"):
+                yield Label("Name:")
+                name_input = Input(
+                    placeholder="Request name",
+                    value=self.request.name if self.request else "",
+                    id="name-input"
+                )
+                name_input.disabled = self.is_edit  # Can't rename existing requests
+                yield name_input
 
-            yield Label("Method:")
-            method_options = [(m.value, m.value) for m in HttpMethod]
-            initial_method = self.request.method.value if self.request else "GET"
-            yield Select(
-                method_options,
-                value=initial_method,
-                id="method-select"
-            )
+                yield Label("Method:")
+                method_options = [(m.value, m.value) for m in HttpMethod]
+                initial_method = self.request.method.value if self.request else "GET"
+                yield Select(
+                    method_options,
+                    value=initial_method,
+                    id="method-select"
+                )
 
-            yield Label("URL:")
-            yield Input(
-                placeholder="https://api.example.com/endpoint or {{base_url}}/api/users",
-                value=self.request.url if self.request else "",
-                id="url-input"
-            )
+                yield Label("URL:")
+                yield Input(
+                    placeholder="https://api.example.com/endpoint or {{base_url}}/api/users",
+                    value=self.request.url if self.request else "",
+                    id="url-input"
+                )
 
-            yield Label("Headers (one per line, format: Key: Value):")
-            headers_text = ""
-            if self.request and self.request.headers:
-                headers_text = "\n".join(f"{k}: {v}" for k, v in self.request.headers.items())
-            headers_area = TextArea(id="headers-input")
-            headers_area.text = headers_text
-            headers_area.show_line_numbers = False
-            yield headers_area
+                yield Label("Headers (one per line, format: Key: Value):")
+                headers_text = ""
+                if self.request and self.request.headers:
+                    headers_text = "\n".join(f"{k}: {v}" for k, v in self.request.headers.items())
+                headers_area = TextArea(id="headers-input")
+                headers_area.text = headers_text
+                headers_area.show_line_numbers = False
+                yield headers_area
 
-            yield Label("Body (JSON, text, etc.):")
-            body_area = TextArea(id="body-input")
-            body_area.text = self.request.body if self.request and self.request.body else ""
-            body_area.show_line_numbers = False
-            yield body_area
+                yield Label("Body (JSON, text, etc.):")
+                body_area = TextArea(id="body-input")
+                body_area.text = self.request.body if self.request and self.request.body else ""
+                body_area.show_line_numbers = False
+                yield body_area
 
-            yield Label("Expected Status (optional):")
-            yield Input(
-                placeholder="200",
-                value=str(self.request.expected_status) if self.request and self.request.expected_status else "",
-                id="expected-status-input"
-            )
+                yield Label("Expected Status (optional):")
+                yield Input(
+                    placeholder="200",
+                    value=str(self.request.expected_status) if self.request and self.request.expected_status else "",
+                    id="expected-status-input"
+                )
 
             with Horizontal(classes="dialog-buttons"):
                 yield Button("Save", variant="primary", id="save-btn")
@@ -280,13 +290,14 @@ class ResponseViewerDialog(ModalScreen):
     """
     Dialog for displaying API response.
 
-    Shows status code, headers, body, and assertion results.
+    Shows status code, headers (collapsed by default), body (expanded by default), and assertion results.
     """
 
     BINDINGS = [
         Binding("escape", "dismiss", "Close", show=False),
-        Binding("enter", "dismiss", "Close", show=False),
         Binding("r", "rerun", "Re-run", show=True),
+        Binding("h", "toggle_headers", "Toggle Headers", show=True),
+        Binding("b", "toggle_body", "Toggle Body", show=True),
     ]
 
     CSS = """
@@ -301,6 +312,13 @@ class ResponseViewerDialog(ModalScreen):
         background: $surface;
         border: thick $primary;
         padding: 1 2;
+        layout: vertical;
+    }
+
+    ResponseViewerDialog .form-content {
+        width: 100%;
+        height: 1fr;
+        overflow: auto;
     }
 
     ResponseViewerDialog .dialog-title {
@@ -317,19 +335,39 @@ class ResponseViewerDialog(ModalScreen):
         margin-bottom: 1;
     }
 
-    ResponseViewerDialog .section-title {
+    ResponseViewerDialog .section-header {
         width: 100%;
-        text-style: bold;
         margin-top: 1;
         margin-bottom: 0;
+        height: 1;
+        padding: 0;
+        border: none;
+        background: transparent;
+        text-align: left;
     }
 
-    ResponseViewerDialog VerticalScroll {
+    ResponseViewerDialog .section-header:hover {
+        background: $boost;
+        text-style: bold underline;
+    }
+
+    ResponseViewerDialog .section-header:focus {
+        background: $accent 20%;
+        border: none;
+        text-style: bold;
+    }
+
+    ResponseViewerDialog .section-content {
         width: 100%;
-        height: 30;
+        height: 20;
         border: solid $primary-lighten-1;
         padding: 1;
         margin-bottom: 1;
+        overflow: auto;
+    }
+
+    ResponseViewerDialog .collapsed {
+        display: none;
     }
 
     ResponseViewerDialog .dialog-buttons {
@@ -337,6 +375,8 @@ class ResponseViewerDialog(ModalScreen):
         height: auto;
         align: center middle;
         layout: horizontal;
+        border-top: solid $primary-lighten-1;
+        padding-top: 1;
     }
 
     ResponseViewerDialog Button {
@@ -368,35 +408,53 @@ class ResponseViewerDialog(ModalScreen):
         self.request_name = request_name
         self.response = response
         self.expected_status = expected_status
+        self.headers_expanded = False  # Collapsed by default
+        self.body_expanded = True      # Expanded by default
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the dialog."""
         with Container():
             yield Label(f"Response: {self.request_name}", classes="dialog-title")
 
-            # Status line
-            status_color = self.response.status_color()
-            status_symbol = self.response.status_symbol()
-            status_text = f"[{status_color}]{status_symbol} {self.response.status_code} {self.response.reason}[/]     Time: {self.response.elapsed_ms:.0f}ms"
-            yield Static(status_text, classes="status-line")
+            with VerticalScroll(classes="form-content"):
+                # Status line
+                status_color = self.response.status_color()
+                status_symbol = self.response.status_symbol()
+                status_text = f"[{status_color}]{status_symbol} {self.response.status_code} {self.response.reason}[/]     Time: {self.response.elapsed_ms:.0f}ms"
+                yield Static(status_text, classes="status-line")
 
-            # Assertion result
-            if self.expected_status is not None:
-                if self.response.matches_expected(self.expected_status):
-                    yield Static(f"[green]✓ Status matches expected ({self.expected_status})[/green]")
-                else:
-                    yield Static(f"[red]✗ Status does not match expected ({self.expected_status})[/red]")
+                # Assertion result
+                if self.expected_status is not None:
+                    if self.response.matches_expected(self.expected_status):
+                        yield Static(f"[green]✓ Status matches expected ({self.expected_status})[/green]")
+                    else:
+                        yield Static(f"[red]✗ Status does not match expected ({self.expected_status})[/red]")
 
-            # Headers
-            yield Label("Headers:", classes="section-title")
-            with VerticalScroll():
-                headers_text = "\n".join(f"{k}: {v}" for k, v in self.response.headers.items())
-                yield Static(headers_text)
+                # Headers (collapsed by default)
+                headers_indicator = "▼ Headers" if self.headers_expanded else "▶ Headers"
+                yield Button(headers_indicator, id="headers-toggle", classes="section-header", variant="default")
+                headers_scroll = VerticalScroll(id="headers-content", classes="section-content")
+                if not self.headers_expanded:
+                    headers_scroll.styles.display = "none"
+                with headers_scroll:
+                    headers_text = "\n".join(f"{k}: {v}" for k, v in self.response.headers.items())
+                    # Use Static without markup by escaping [ and ] characters
+                    escaped_headers = headers_text.replace("[", "\\[").replace("]", "\\]")
+                    headers_widget = Static(escaped_headers)
+                    yield headers_widget
 
-            # Body
-            yield Label("Body:", classes="section-title")
-            with VerticalScroll():
-                yield Static(self.response.get_formatted_body())
+                # Body (expanded by default)
+                body_indicator = "▼ Body" if self.body_expanded else "▶ Body"
+                yield Button(body_indicator, id="body-toggle", classes="section-header", variant="default")
+                body_scroll = VerticalScroll(id="body-content", classes="section-content")
+                if not self.body_expanded:
+                    body_scroll.styles.display = "none"
+                with body_scroll:
+                    body_text = self.response.get_formatted_body()
+                    # Use Static without markup by escaping [ and ] characters
+                    escaped_body = body_text.replace("[", "\\[").replace("]", "\\]")
+                    body_widget = Static(escaped_body)
+                    yield body_widget
 
             with Horizontal(classes="dialog-buttons"):
                 yield Button("Close", variant="default", id="close-btn")
@@ -408,6 +466,27 @@ class ResponseViewerDialog(ModalScreen):
             self.dismiss(None)
         elif event.button.id == "rerun-btn":
             self.dismiss({"action": "rerun"})
+        elif event.button.id == "headers-toggle":
+            event.stop()
+            self.action_toggle_headers()
+        elif event.button.id == "body-toggle":
+            event.stop()
+            self.action_toggle_body()
+
+    def on_key(self, event) -> None:
+        """Handle key presses for toggling sections."""
+        # Allow Enter to toggle focused headers when they have focus
+        if event.key == "enter":
+            focused = self.focused
+            if focused and hasattr(focused, 'id'):
+                if focused.id == "headers-toggle":
+                    event.prevent_default()
+                    self.action_toggle_headers()
+                    return
+                elif focused.id == "body-toggle":
+                    event.prevent_default()
+                    self.action_toggle_body()
+                    return
 
     def action_dismiss(self) -> None:
         """Handle enter/escape key press."""
@@ -416,6 +495,40 @@ class ResponseViewerDialog(ModalScreen):
     def action_rerun(self) -> None:
         """Handle 'r' key press."""
         self.dismiss({"action": "rerun"})
+
+    def action_toggle_headers(self) -> None:
+        """Toggle headers section visibility."""
+        self.headers_expanded = not self.headers_expanded
+        try:
+            headers_content = self.query_one("#headers-content", VerticalScroll)
+            headers_toggle = self.query_one("#headers-toggle", Button)
+
+            if self.headers_expanded:
+                headers_content.styles.display = "block"
+                headers_toggle.label = "▼ Headers"
+            else:
+                headers_content.styles.display = "none"
+                headers_toggle.label = "▶ Headers"
+        except Exception as e:
+            # Silently fail - the dialog will still be usable
+            pass
+
+    def action_toggle_body(self) -> None:
+        """Toggle body section visibility."""
+        self.body_expanded = not self.body_expanded
+        try:
+            body_content = self.query_one("#body-content", VerticalScroll)
+            body_toggle = self.query_one("#body-toggle", Button)
+
+            if self.body_expanded:
+                body_content.styles.display = "block"
+                body_toggle.label = "▼ Body"
+            else:
+                body_content.styles.display = "none"
+                body_toggle.label = "▶ Body"
+        except Exception as e:
+            # Silently fail - the dialog will still be usable
+            pass
 
 
 class ApiRequestListPanel(Static):
@@ -523,6 +636,11 @@ class ApiRequestListPanel(Static):
             else:
                 lines.append(line)
 
+        # Add help text footer
+        help_text = "[dim]Press Enter to execute • j/k to navigate • n to create • e to edit • d to delete[/dim]"
+        lines.append("")
+        lines.append(help_text)
+
         return "\n".join(lines)
 
     def action_execute(self) -> None:
@@ -598,6 +716,10 @@ class ApiRequestListPanel(Static):
             from ccc.tui.dialogs import ErrorDialog
             self.app.push_screen(ErrorDialog("Request Failed", error))
         elif response:
+            # Update the last_executed timestamp
+            request.update_last_executed()
+            update_request(self.branch_name, request)
+
             def on_response_action(result):
                 if result and result.get("action") == "rerun":
                     self._execute_request(request)

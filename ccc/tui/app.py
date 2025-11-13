@@ -377,6 +377,11 @@ class CommandCenterTUI(App):
         padding: 1;
     }
 
+    .status-panel:focus {
+        border: solid $primary;
+        background: $boost;
+    }
+
     #ticket-header {
         margin-bottom: 1;
         padding: 1;
@@ -716,25 +721,18 @@ class CommandCenterTUI(App):
         self.push_screen(output_dialog)
 
     def action_api_request(self):
-        """Show API request builder for selected ticket."""
+        """Focus the API requests panel."""
         ticket = self._get_selected_ticket()
         if not ticket:
             self.notify("No ticket selected", severity="warning")
             return
 
-        from ccc.tui.api_widgets import RequestBuilderDialog
-
-        def on_request_saved(result):
-            """Handle request save completion."""
-            if result and result.get("success"):
-                self.notify(result.get("message", "Request saved"), severity="information")
-                # Refresh the API panel
-                self.action_refresh()
-
-        self.push_screen(
-            RequestBuilderDialog(ticket.branch),
-            on_request_saved
-        )
+        # Focus the API panel
+        try:
+            api_panel = self.query_one("#api-panel")
+            api_panel.focus()
+        except Exception:
+            self.notify("API panel not available", severity="warning")
 
 
 def run_tui():

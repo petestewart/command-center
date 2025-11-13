@@ -6,7 +6,7 @@ Defines the core data models for API testing functionality.
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, List, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import json
 
@@ -112,7 +112,7 @@ class ApiRequest:
 
     def update_last_executed(self):
         """Update the last executed timestamp to now"""
-        self.last_executed = datetime.now()
+        self.last_executed = datetime.now(timezone.utc)
 
 
 @dataclass
