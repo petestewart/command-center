@@ -26,18 +26,6 @@ def get_ccc_home() -> Path:
     return ccc_home
 
 
-def get_ticket_dir(ticket_id: str) -> Path:
-    """
-    Get the directory for a specific ticket's metadata.
-    Creates it if it doesn't exist.
-
-    DEPRECATED: Use get_branch_dir() instead for branch-based system.
-    """
-    ticket_dir = get_ccc_home() / ticket_id
-    ticket_dir.mkdir(exist_ok=True)
-    return ticket_dir
-
-
 def sanitize_branch_name(branch_name: str) -> str:
     """
     Sanitize a branch name for use as a directory or file name.
@@ -87,18 +75,6 @@ def extract_display_id(branch_name: str) -> Optional[str]:
     pattern = r"[A-Z]+-\d+"
     match = re.search(pattern, branch_name)
     return match.group(0) if match else None
-
-
-def validate_ticket_id(ticket_id: str) -> bool:
-    """
-    Validate ticket ID format.
-    Expected format: PREFIX-NUMBER (e.g., IN-413, PROJ-123)
-
-    DEPRECATED: This validation is no longer needed for branch-based system.
-    Branch names can be any valid git branch name.
-    """
-    pattern = r"^[A-Z]+-\d+$"
-    return bool(re.match(pattern, ticket_id))
 
 
 def format_time_ago(dt: datetime) -> str:
@@ -199,43 +175,6 @@ def get_tmux_session_name_from_branch(branch_name: str, prefix: str = "ccc-") ->
     # Remove any other problematic characters
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "-", sanitized)
     return f"{prefix}{sanitized}"
-
-
-def get_tmux_session_name(ticket_id: str, prefix: str = "ccc-") -> str:
-    """
-    Generate tmux session name for a ticket.
-
-    DEPRECATED: Use get_tmux_session_name_from_branch() for branch-based system.
-    """
-    return f"{prefix}{ticket_id}"
-
-
-def get_branch_name(ticket_id: str, title: Optional[str] = None) -> str:
-    """
-    Generate git branch name from ticket ID and optional title.
-
-    DEPRECATED: This function is no longer needed in the branch-based system.
-    Users will provide the full branch name directly.
-
-    Examples:
-        - get_branch_name("IN-413", "Public API bulk uploads")
-          -> "feature/IN-413-public-api-bulk-uploads"
-        - get_branch_name("BUG-42", "Fix login error")
-          -> "feature/BUG-42-fix-login-error"
-    """
-    branch_parts = ["feature", ticket_id]
-
-    if title:
-        # Convert title to lowercase, replace spaces with hyphens, remove special chars
-        title_slug = re.sub(r"[^a-z0-9-]", "", title.lower().replace(" ", "-"))
-        # Remove multiple consecutive hyphens
-        title_slug = re.sub(r"-+", "-", title_slug)
-        # Remove leading/trailing hyphens
-        title_slug = title_slug.strip("-")
-        if title_slug:
-            branch_parts.append(title_slug)
-
-    return "/".join(branch_parts)
 
 
 def truncate_string(text: str, max_length: int, suffix: str = "...") -> str:

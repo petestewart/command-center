@@ -10,9 +10,9 @@ from dataclasses import dataclass, asdict, field
 
 from ccc.utils import (
     get_ccc_home,
-    get_tmux_session_name,
     get_tmux_session_name_from_branch,
     extract_display_id,
+    print_error,
 )
 
 
@@ -55,15 +55,6 @@ class Ticket:
         """
         return extract_display_id(self.branch)
 
-    @property
-    def id(self) -> str:
-        """
-        Alias for branch to maintain some backwards compatibility.
-
-        DEPRECATED: Use .branch directly instead.
-        """
-        return self.branch
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert ticket to dictionary for YAML serialization."""
         data = asdict(self)
@@ -80,14 +71,6 @@ class Ticket:
             data["created_at"] = datetime.fromisoformat(data["created_at"])
         if isinstance(data.get("updated_at"), str):
             data["updated_at"] = datetime.fromisoformat(data["updated_at"])
-
-        # Support old format with 'id' field for backwards compatibility
-        # If 'id' exists but 'branch' doesn't, use 'id' as the branch
-        if "id" in data and "branch" not in data:
-            data["branch"] = data.pop("id")
-        elif "id" in data and "branch" in data:
-            # Both exist, remove 'id' to avoid duplicate argument
-            data.pop("id", None)
 
         return cls(**data)
 
@@ -115,8 +98,6 @@ class TicketRegistry:
             return [Ticket.from_dict(t) for t in tickets_data]
 
         except Exception as e:
-            from ccc.utils import print_error
-
             print_error(f"Error loading tickets: {e}")
             return []
 
@@ -133,8 +114,6 @@ class TicketRegistry:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
         except Exception as e:
-            from ccc.utils import print_error
-
             print_error(f"Error saving tickets: {e}")
             raise
 

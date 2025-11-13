@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
-from ccc.utils import get_ccc_home, expand_path, sanitize_branch_name
+from ccc.utils import get_ccc_home, expand_path, sanitize_branch_name, print_warning
 
 
 @dataclass
@@ -263,8 +263,6 @@ def load_config() -> Config:
         return config
 
     except Exception as e:
-        from ccc.utils import print_warning
-
         print_warning(f"Error loading config: {e}. Using defaults.")
         return Config()
 

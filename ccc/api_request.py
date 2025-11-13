@@ -49,7 +49,7 @@ class ApiRequest:
     follow_redirects: bool = True
 
     # Metadata
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_executed: Optional[datetime] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -90,7 +90,7 @@ class ApiRequest:
         method = HttpMethod.from_string(data["method"])
 
         # Parse dates
-        created_at = datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now()
+        created_at = datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(timezone.utc)
         last_executed = datetime.fromisoformat(data["last_executed"]) if data.get("last_executed") else None
 
         return cls(
@@ -129,7 +129,7 @@ class ApiResponse:
     headers: Dict[str, str]
     body: str
     elapsed_ms: float
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def is_json(self) -> bool:
         """
@@ -275,7 +275,7 @@ class ApiRequestExecution:
     url: str
     response: Optional[ApiResponse] = None
     error: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def success(self) -> bool:

@@ -10,7 +10,7 @@ from typing import Optional, List, Dict
 import libtmux
 
 from ccc.ticket import Ticket
-from ccc.utils import print_error, print_success, print_warning
+from ccc.utils import print_error, print_success, print_warning, print_info
 
 
 class TmuxSessionManager:
@@ -132,8 +132,6 @@ class TmuxSessionManager:
         try:
             if not self.session_exists(session_name):
                 print_error(f"Tmux session '{session_name}' does not exist")
-                from ccc.utils import print_info
-
                 print_info("The session may have been killed or never created.")
                 print_info("You can recreate it by deleting and recreating the ticket:")
                 print_info(
