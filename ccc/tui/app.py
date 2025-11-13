@@ -318,13 +318,36 @@ class TicketDetailView(VerticalScroll):
         todo_panel = self.query_one("#todo-panel", TodoListWidget)
         todo_panel.branch_name = self.ticket.branch
         todo_panel.refresh_content()
+        # Auto-focus the todo panel so user can immediately navigate
+        # Only focus on initial load, not on refresh
+        todo_panel.focus()
 
     def refresh_status(self):
         """Manually refresh all status panels."""
-        self.update_panels()
+        # Call update_panels but don't pass focus_on_load flag
+        # This is called by auto_refresh timer, so we don't want to steal focus
+        if not self.ticket:
+            self.update_panels()
+            return
 
-        # Phase 4: Refresh todo panel
+        # Update status panels without forcing focus
         from ccc.tui.widgets import TodoListWidget
+
+        # Update all status panels
+        agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
+        agent_panel.branch_name = self.ticket.branch
+
+        git_panel = self.query_one("#git-panel", GitStatusPanel)
+        git_panel.branch_name = self.ticket.branch
+        git_panel.worktree_path = self.ticket.worktree_path
+
+        build_panel = self.query_one("#build-panel", BuildStatusPanel)
+        build_panel.branch_name = self.ticket.branch
+
+        test_panel = self.query_one("#test-panel", TestStatusPanel)
+        test_panel.branch_name = self.ticket.branch
+
+        # Refresh todo panel content only, don't refocus
         todo_panel = self.query_one("#todo-panel", TodoListWidget)
         todo_panel.refresh_content()
 
@@ -956,7 +979,6 @@ class CommandCenterTUI(App):
         # For now, just show a notification that move is not yet implemented
         # In a full implementation, you'd show a dialog to get the new position
         self.notify("Move todo: Use CLI 'ccc todo move' for now", severity="information")
->>>>>>> dabc074 (Phase 4 Week 2 Part 2: Complete TUI Integration)
 
 
 def run_tui():

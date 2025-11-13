@@ -1000,6 +1000,7 @@ class AddTodoDialog(BaseDialog):
     BINDINGS = [
         Binding("escape", "dismiss", "Cancel", show=False),
         Binding("ctrl+s", "save", "Save", show=False),
+        Binding("enter", "save", "Create", show=False),
     ]
 
     CSS = """
@@ -1083,6 +1084,11 @@ class AddTodoDialog(BaseDialog):
             self.action_save()
         else:
             self.action_dismiss()
+
+    def on_input_submitted(self, event) -> None:
+        """Handle Enter key in input fields."""
+        # When user presses Enter in any input field, save the todo
+        self.action_save()
 
     def action_save(self) -> None:
         """Save the new todo."""

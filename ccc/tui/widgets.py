@@ -579,10 +579,7 @@ class TodoListWidget(VerticalScroll):
         width: 100%;
         padding: 0 1;
         margin-bottom: 0;
-    }
-
-    TodoListWidget .todo-item-focused {
-        background: $primary-darken-2;
+        border: none;
     }
 
     TodoListWidget .todo-done {
@@ -598,6 +595,28 @@ class TodoListWidget(VerticalScroll):
     }
 
     TodoListWidget .todo-not-started {
+        color: $text;
+    }
+
+    TodoListWidget .todo-item-focused {
+        background: $boost;
+        color: $text;
+        text-style: bold;
+    }
+
+    TodoListWidget .todo-item-focused.todo-done {
+        color: $success;
+    }
+
+    TodoListWidget .todo-item-focused.todo-in-progress {
+        color: $accent;
+    }
+
+    TodoListWidget .todo-item-focused.todo-blocked {
+        color: $warning;
+    }
+
+    TodoListWidget .todo-item-focused.todo-not-started {
         color: $text;
     }
 
@@ -642,6 +661,7 @@ class TodoListWidget(VerticalScroll):
             classes: The CSS classes for the widget
         """
         super().__init__(name=name, id=id, classes=classes)
+        self.border_title = "Tasks"
         self.branch_name = branch_name
         self.todos = []
         self._focused_index = 0
@@ -701,12 +721,15 @@ class TodoListWidget(VerticalScroll):
         is_focused = idx == self._focused_index
         focused_class = " todo-item-focused" if is_focused else ""
 
-        content = f"{symbol} {todo.id}. {todo.description} {info_str}"
+        # Add visual cursor indicator for focused item
+        cursor = "▶ " if is_focused else "  "
+        # Use sequential display number (idx + 1) instead of database ID
+        display_num = idx + 1
+        content = f"{cursor}{symbol} {display_num}. {todo.description} {info_str}"
 
         return Static(
             content,
             classes=f"todo-item {status_class}{focused_class}",
-            id=f"todo-{todo.id}",
         )
 
     def _create_progress_stats(self) -> Static:
@@ -788,8 +811,12 @@ class TodoListWidget(VerticalScroll):
     def refresh_content(self) -> None:
         """Refresh the todo list display."""
         self.load_todos()
-        self.remove_children()
 
+        # Clear all existing children completely
+        for child in list(self.children):
+            child.remove()
+
+        # Remount all children
         if not self.todos:
             self.mount(Static("[dim]No todos. Press 'n' to create one.[/dim]", classes="no-todos"))
         else:
