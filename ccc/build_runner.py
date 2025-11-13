@@ -126,7 +126,10 @@ class CommandRunner:
         def _run():
             returncode, output = self.run()
             if on_complete:
-                on_complete(returncode, output)
+                try:
+                    on_complete(returncode, output)
+                except Exception as e:
+                    logger.error(f"Error in on_complete callback: {e}", exc_info=True)
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()

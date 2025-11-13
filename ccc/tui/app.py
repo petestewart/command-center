@@ -719,9 +719,16 @@ class CommandCenterTUI(App):
 
         def on_complete(success: bool, message: str):
             """Handle build completion."""
-            self.call_from_thread(output_dialog.set_complete, success, message)
-            # Refresh build status panel
-            self.call_from_thread(self.action_refresh)
+            try:
+                self.call_from_thread(output_dialog.set_complete, success, message)
+                # Refresh build status panel
+                self.call_from_thread(self.action_refresh)
+            except Exception as e:
+                # Ensure dialog is marked complete even if there's an error
+                try:
+                    self.call_from_thread(output_dialog.set_complete, False, f"Error: {e}")
+                except Exception:
+                    pass  # Last resort - dialog can still be closed with escape
 
         # Start the build
         run_build(
@@ -754,9 +761,16 @@ class CommandCenterTUI(App):
 
         def on_complete(success: bool, message: str):
             """Handle test completion."""
-            self.call_from_thread(output_dialog.set_complete, success, message)
-            # Refresh test status panel
-            self.call_from_thread(self.action_refresh)
+            try:
+                self.call_from_thread(output_dialog.set_complete, success, message)
+                # Refresh test status panel
+                self.call_from_thread(self.action_refresh)
+            except Exception as e:
+                # Ensure dialog is marked complete even if there's an error
+                try:
+                    self.call_from_thread(output_dialog.set_complete, False, f"Error: {e}")
+                except Exception:
+                    pass  # Last resort - dialog can still be closed with escape
 
         # Start the tests
         run_tests(
