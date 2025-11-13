@@ -5,7 +5,7 @@ Dialog components for Command Center TUI.
 from typing import Callable, Optional, List
 from pathlib import Path
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static, Button, Label, LoadingIndicator
 from textual.binding import Binding
@@ -27,14 +27,12 @@ class BaseDialog(ModalScreen):
         Binding("escape", "dismiss", "Close", show=False),
     ]
 
-    CSS = """
+    DEFAULT_CSS = """
     BaseDialog {
         align: center middle;
     }
 
     BaseDialog > Container {
-        width: auto;
-        height: auto;
         max-width: 80;
         max-height: 80%;
         background: $surface;
@@ -338,7 +336,7 @@ class CommitDialog(BaseDialog):
         Binding("ctrl+enter", "commit", "Commit", show=True),
     ]
 
-    CSS = """
+    DEFAULT_CSS = """
     CommitDialog > Container {
         max-width: 100;
         max-height: 90%;
@@ -491,15 +489,14 @@ class LogDialog(BaseDialog):
         Binding("q", "dismiss", "Close", show=False),
     ]
 
-    CSS = """
+    DEFAULT_CSS = """
     LogDialog > Container {
         max-width: 120;
         max-height: 90%;
     }
 
     LogDialog LogViewer {
-        max-height: 25;
-        height: auto;
+        height: 30;
     }
     """
 
@@ -563,7 +560,7 @@ class OutputDialog(BaseDialog):
         Binding("q", "close", "Close", show=False),
     ]
 
-    CSS = """
+    DEFAULT_CSS = """
     OutputDialog > Container {
         max-width: 120;
         max-height: 90%;
@@ -677,6 +674,310 @@ class OutputDialog(BaseDialog):
         """Handle button press."""
         if event.button.id == "close" and not self._is_running:
             self.action_close()
+
+
+class FileBrowserDialog(BaseDialog):
+    """
+    Dialog for browsing and previewing changed files with diffs.
+
+    Shows a list of changed files and displays diffs when selected.
+    Supports navigation between files and opening files in editor.
+
+    Example:
+        self.push_screen(FileBrowserDialog(worktree_path, branch_name))
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close", show=False),
+        Binding("q", "dismiss", "Close", show=False),
+        Binding("j", "next_file", "Next File", show=False),
+        Binding("k", "prev_file", "Prev File", show=False),
+        Binding("e", "open_editor", "Edit", show=True),
+        Binding("enter", "open_editor", "Edit", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    FileBrowserDialog > Container {
+        max-width: 140;
+        max-height: 95%;
+    }
+
+    FileBrowserDialog > Container > Horizontal {
+        height: 1fr;
+    }
+
+    FileBrowserDialog .file-list-container {
+        width: 30;
+        height: 100%;
+        border-right: solid $primary;
+        padding: 0 1;
+    }
+
+    FileBrowserDialog .file-list-item {
+        width: 100%;
+        padding: 0 1;
+    }
+
+    FileBrowserDialog .file-list-item.selected {
+        background: $primary;
+        color: $text;
+    }
+
+    FileBrowserDialog .diff-container {
+        width: 1fr;
+        height: 100%;
+        padding: 0 1;
+    }
+
+    FileBrowserDialog .diff-header {
+        width: 100%;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    FileBrowserDialog .diff-content {
+        width: 100%;
+        height: 1fr;
+    }
+
+    FileBrowserDialog .no-files {
+        width: 100%;
+        height: 100%;
+        content-align: center middle;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(
+        self,
+        worktree_path: Path,
+        branch_name: str,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+    ) -> None:
+        """
+        Initialize the file browser dialog.
+
+        Args:
+            worktree_path: Path to the git worktree
+            branch_name: Current branch name
+            name: The name of the dialog
+            id: The ID of the dialog in the DOM
+            classes: The CSS classes for the dialog
+        """
+        super().__init__(
+            title=f"Changed Files: {branch_name}",
+            name=name,
+            id=id,
+            classes=classes,
+        )
+        self.worktree_path = worktree_path
+        self.branch_name = branch_name
+        self.files: List[GitFile] = []
+        self.selected_index = 0
+
+    def compose_content(self) -> ComposeResult:
+        """Create the dialog content."""
+        from ccc.git_operations import get_changed_files
+
+        # Load changed files
+        self.files, error = get_changed_files(self.worktree_path)
+
+        if error:
+            yield Static(f"[red]Error loading files: {error}[/red]", classes="no-files")
+        elif not self.files:
+            yield Static("[dim]No changed files[/dim]", classes="no-files")
+        else:
+            with Horizontal():
+                # File list on the left
+                with VerticalScroll(classes="file-list-container"):
+                    for idx, file in enumerate(self.files):
+                        status_color = self._get_status_color(file.status)
+                        classes = "file-list-item"
+                        if idx == self.selected_index:
+                            classes += " selected"
+                        yield Static(
+                            f"[{status_color}]{file.status}[/] {file.path}",
+                            classes=classes,
+                            id=f"file-{idx}",
+                        )
+
+                # Diff display on the right
+                with Container(classes="diff-container"):
+                    yield Static("", classes="diff-header", id="diff-header")
+                    yield VerticalScroll(
+                        Static("", classes="diff-content"),
+                        classes="diff-content",
+                        id="diff-scroll",
+                    )
+
+    def on_mount(self) -> None:
+        """Load the diff for the first file."""
+        if self.files:
+            self._show_diff(0)
+
+    def _get_status_color(self, status: str) -> str:
+        """Get color for file status."""
+        color_map = {
+            "M": "yellow",
+            "A": "green",
+            "D": "red",
+            "R": "cyan",
+            "?": "blue",
+        }
+        return color_map.get(status, "white")
+
+    def _show_diff(self, index: int) -> None:
+        """Show diff for the file at given index."""
+        if not self.files or index < 0 or index >= len(self.files):
+            return
+
+        self.selected_index = index
+        file = self.files[index]
+
+        # Update file list highlighting
+        for idx in range(len(self.files)):
+            file_item = self.query_one(f"#file-{idx}", Static)
+            if idx == index:
+                file_item.add_class("selected")
+            else:
+                file_item.remove_class("selected")
+
+        # Update diff header
+        diff_header = self.query_one("#diff-header", Static)
+        diff_header.update(f"[bold]{file.path}[/bold] ({file.display_status})")
+
+        # Get and display diff
+        diff_content = self._get_diff(file)
+        diff_scroll = self.query_one("#diff-scroll", VerticalScroll)
+        diff_static = diff_scroll.query_one(Static)
+        diff_static.update(diff_content)
+        diff_scroll.scroll_home()
+
+    def _get_diff(self, file: GitFile) -> str:
+        """Get the diff for a file."""
+        import subprocess
+        from ccc.config import load_config
+
+        config = load_config()
+
+        try:
+            # Try to use configured diff viewer
+            if config.diff_viewer == "delta" and self._has_command("delta"):
+                result = subprocess.run(
+                    ["git", "diff", "--color=always", file.path],
+                    cwd=str(self.worktree_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    # Delta adds ANSI colors, which Rich can render
+                    return result.stdout or "[dim]No changes to display[/dim]"
+
+            # Fall back to git diff
+            result = subprocess.run(
+                ["git", "diff", file.path],
+                cwd=str(self.worktree_path),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+                diff_text = result.stdout
+                if not diff_text:
+                    # For untracked files, show the entire file
+                    if file.status == "?":
+                        try:
+                            file_path = self.worktree_path / file.path
+                            with open(file_path, "r") as f:
+                                content = f.read()
+                                return f"[green]+ New file content:[/green]\n{content[:1000]}"
+                        except Exception:
+                            return "[dim]Cannot read file[/dim]"
+                    return "[dim]No changes to display[/dim]"
+
+                # Format diff with colors
+                return self._format_diff(diff_text)
+            else:
+                return f"[red]Error getting diff: {result.stderr}[/red]"
+
+        except subprocess.TimeoutExpired:
+            return "[red]Diff command timed out[/red]"
+        except Exception as e:
+            return f"[red]Error: {e}[/red]"
+
+    def _has_command(self, command: str) -> bool:
+        """Check if a command is available."""
+        import subprocess
+        try:
+            subprocess.run(
+                ["which", command],
+                capture_output=True,
+                timeout=1,
+            )
+            return True
+        except Exception:
+            return False
+
+    def _format_diff(self, diff_text: str) -> str:
+        """Format diff text with syntax highlighting."""
+        lines = []
+        for line in diff_text.split("\n"):
+            if line.startswith("+"):
+                lines.append(f"[green]{line}[/green]")
+            elif line.startswith("-"):
+                lines.append(f"[red]{line}[/red]")
+            elif line.startswith("@@"):
+                lines.append(f"[cyan]{line}[/cyan]")
+            elif line.startswith("diff --git"):
+                lines.append(f"[bold]{line}[/bold]")
+            else:
+                lines.append(line)
+        return "\n".join(lines)
+
+    def compose_buttons(self) -> ComposeResult:
+        """Add action buttons."""
+        with Horizontal(classes="dialog-buttons"):
+            yield Button("Edit (e)", variant="primary", id="edit")
+            yield Button("Close (q)", variant="default", id="close")
+
+    def action_next_file(self) -> None:
+        """Navigate to next file."""
+        if self.files and self.selected_index < len(self.files) - 1:
+            self._show_diff(self.selected_index + 1)
+
+    def action_prev_file(self) -> None:
+        """Navigate to previous file."""
+        if self.files and self.selected_index > 0:
+            self._show_diff(self.selected_index - 1)
+
+    def action_open_editor(self) -> None:
+        """Open the selected file in editor."""
+        if not self.files:
+            return
+
+        file = self.files[self.selected_index]
+        file_path = self.worktree_path / file.path
+
+        # Dismiss dialog with file path to open
+        self.dismiss({
+            "action": "edit",
+            "file_path": str(file_path),
+        })
+
+    def action_dismiss(self) -> None:
+        """Handle escape/q key press."""
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "edit":
+            self.action_open_editor()
+        else:
+            self.dismiss(None)
 
 
 class AddTodoDialog(BaseDialog):

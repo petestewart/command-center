@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple
-from datetime import datetime, timezone
+from datetime import datetime
 import logging
 
 from ccc.config import Config, load_config
@@ -75,18 +75,29 @@ class CommandRunner:
                 universal_newlines=True,
             )
 
-            # Read output line by line
-            for line in self.process.stdout:
-                line = line.rstrip("\n")
-                self.output_lines.append(line)
+            # Read output line by line and stream to callback
+            try:
+                if self.process.stdout:
+                    for line in self.process.stdout:
+                        line = line.rstrip("\n")
+                        self.output_lines.append(line)
 
-                # Call callback if provided
-                if self.callback:
-                    self.callback(line)
+                        # Call callback if provided
+                        if self.callback:
+                            self.callback(line)
+            except (IOError, OSError, ValueError):
+                # Handle broken pipe or closed file errors
+                # This can happen if process exits before we finish reading
+                pass
+            finally:
+                # Close stdout to ensure the iteration completes
+                if self.process and self.process.stdout:
+                    self.process.stdout.close()
 
-            # Wait for process to complete
-            self.process.wait()
-            self.returncode = self.process.returncode
+                # Ensure process is fully finished
+                if self.process:
+                    self.process.wait()
+                    self.returncode = self.process.returncode
 
         except Exception as e:
             logger.error(f"Error running command: {e}", exc_info=True)
@@ -175,7 +186,7 @@ def run_build(
         status = BuildStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_build=datetime.now(timezone.utc),
+            last_build=datetime.now(),
             duration_seconds=int(duration) if duration else 0,
             errors=[line for line in output if "error" in line.lower()][:10],  # Keep first 10 errors
             warnings=len([line for line in output if "warning" in line.lower()]),
@@ -254,7 +265,7 @@ def run_tests(
         status = TestStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_run=datetime.now(timezone.utc),
+            last_run=datetime.now(),
             duration_seconds=int(duration) if duration else 0,
             total=passed + failed + skipped,
             passed=passed,
