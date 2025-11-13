@@ -321,9 +321,6 @@ class TicketDetailView(VerticalScroll):
         todo_panel = self.query_one("#todo-panel", TodoListWidget)
         todo_panel.branch_name = self.ticket.branch
         todo_panel.refresh_content()
-        # Auto-focus the todo panel so user can immediately navigate
-        # Only focus on initial load, not on refresh
-        todo_panel.focus()
 
         # Phase 7: Update API panel
         from ccc.tui.api_widgets import ApiRequestListPanel
