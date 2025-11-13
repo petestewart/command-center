@@ -385,6 +385,7 @@ class CommandCenterTUI(App):
         height: 100%;
         border: solid $primary;
         padding: 1;
+        overflow: auto;
     }
 
     DataTable {
@@ -394,8 +395,10 @@ class CommandCenterTUI(App):
     .status-panel {
         border: solid $accent;
         height: auto;
+        max-height: 12;
         margin: 1 0;
         padding: 1;
+        overflow: auto;
     }
 
     .status-panel:focus {
@@ -407,6 +410,7 @@ class CommandCenterTUI(App):
         margin-bottom: 1;
         padding: 1;
         background: $boost;
+        height: auto;
     }
     """
 
