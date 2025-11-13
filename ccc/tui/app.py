@@ -17,7 +17,7 @@ from rich.text import Text
 
 from ccc.ticket import Ticket, TicketRegistry
 from ccc.status import read_agent_status
-from ccc.git_status import get_git_status, clear_git_status_cache
+from ccc.git_status import get_git_status
 from ccc.build_status import read_build_status
 from ccc.test_status import read_test_status
 from ccc.config import load_config
@@ -31,14 +31,14 @@ from ccc.tui.dialogs import (
     SuccessDialog,
     LogDialog,
     OutputDialog,
+    FileBrowserDialog,
 )
 from ccc.git_operations import (
     push_to_remote,
     pull_from_remote,
     get_commit_log,
-    find_worktree_by_branch,
 )
-from ccc.build_runner import run_build
+from ccc.build_runner import run_build, run_tests
 
 
 class StatusPanel(Static):
@@ -131,10 +131,10 @@ class GitStatusPanel(Static):
             return
 
         config = load_config()
-        # Don't use cache when updating - we want fresh data
         git_status = get_git_status(
             self.worktree_path,
-            use_cache=False
+            use_cache=True,
+            cache_seconds=config.git_status_cache_seconds
         )
 
         if not git_status:
@@ -292,19 +292,12 @@ class TicketDetailView(VerticalScroll):
             header.update("No ticket selected")
             return
 
-        # Resolve the actual worktree path from git
-        # This handles cases where the stored path might be wrong
-        actual_worktree_path = find_worktree_by_branch(self.ticket.branch)
-        if not actual_worktree_path:
-            # Fall back to the stored path if not found
-            actual_worktree_path = Path(self.ticket.worktree_path)
-
         # Update header with branch name and extracted ID if available
         header = self.query_one("#ticket-header", Static)
         display_id = f"[{self.ticket.display_id}] " if self.ticket.display_id else ""
         header.update(f"[bold]{display_id}{self.ticket.branch}[/bold]\n"
                      f"Title: {self.ticket.title}\n"
-                     f"Worktree: {actual_worktree_path}")
+                     f"Worktree: {self.ticket.worktree_path}")
 
         # Update all status panels - use branch (which is the primary ID)
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -312,7 +305,7 @@ class TicketDetailView(VerticalScroll):
 
         git_panel = self.query_one("#git-panel", GitStatusPanel)
         git_panel.branch_name = self.ticket.branch
-        git_panel.worktree_path = str(actual_worktree_path)
+        git_panel.worktree_path = self.ticket.worktree_path
 
         build_panel = self.query_one("#build-panel", BuildStatusPanel)
         build_panel.branch_name = self.ticket.branch
@@ -328,21 +321,7 @@ class TicketDetailView(VerticalScroll):
 
     def refresh_status(self):
         """Manually refresh all status panels."""
-        if not self.ticket:
-            return
-
-        # Directly refresh each panel's content (don't rely on reactive watchers)
-        agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
-        agent_panel.update_content()
-
-        git_panel = self.query_one("#git-panel", GitStatusPanel)
-        git_panel.update_content()
-
-        build_panel = self.query_one("#build-panel", BuildStatusPanel)
-        build_panel.update_content()
-
-        test_panel = self.query_one("#test-panel", TestStatusPanel)
-        test_panel.update_content()
+        self.update_panels()
 
 
 class CommandCenterTUI(App):
@@ -395,12 +374,15 @@ class CommandCenterTUI(App):
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select", "Select", show=False),
-        # Phase 3: New keybindings
+        # Phase 3 Week 1: Git & Build
         Binding("c", "commit", "Commit"),
         Binding("p", "push", "Push"),
         Binding("P", "pull", "Pull"),
         Binding("l", "log", "Log"),
         Binding("b", "build", "Build"),
+        # Phase 3 Week 2: Tests & Files
+        Binding("t", "test", "Test"),
+        Binding("f", "files", "Files"),
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
     ]
@@ -480,19 +462,11 @@ class CommandCenterTUI(App):
 
     def update_detail_view(self):
         """Update the detail view with selected ticket."""
-        # Clear git status cache when switching tickets
-        if self.selected_ticket_id:
-            for ticket in self.tickets:
-                if ticket.branch == self.selected_ticket_id:
-                    clear_git_status_cache(ticket.worktree_path)
-                    break
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.branch_name = self.selected_ticket_id
 
     def action_refresh(self):
         """Manually refresh all data."""
-        # Clear git status cache to force fresh query
-        clear_git_status_cache()
         self.load_tickets()
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.refresh_status()
@@ -525,21 +499,12 @@ class CommandCenterTUI(App):
                 return ticket
         return None
 
-    def _resolve_worktree_path(self, ticket: Ticket) -> Path:
-        """Resolve the actual worktree path for a ticket from git."""
-        actual_path = find_worktree_by_branch(ticket.branch)
-        if actual_path:
-            return actual_path
-        return Path(ticket.worktree_path)
-
     def action_commit(self):
         """Show commit dialog for selected ticket."""
         ticket = self._get_selected_ticket()
         if not ticket:
             self.notify("No ticket selected", severity="warning")
             return
-
-        worktree_path = self._resolve_worktree_path(ticket)
 
         def on_commit_complete(result):
             """Handle commit completion."""
@@ -550,7 +515,7 @@ class CommandCenterTUI(App):
             # If result is None, user cancelled
 
         self.push_screen(
-            CommitDialog(worktree_path, ticket.branch),
+            CommitDialog(Path(ticket.worktree_path), ticket.branch),
             on_commit_complete
         )
 
@@ -561,7 +526,6 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
 
         def on_confirm(confirmed: bool):
@@ -577,7 +541,7 @@ class CommandCenterTUI(App):
 
             def do_push():
                 result = push_to_remote(
-                    worktree_path,
+                    Path(ticket.worktree_path),
                     remote=config.default_git_remote,
                     branch=ticket.branch,
                 )
@@ -616,7 +580,6 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
 
         def on_confirm(confirmed: bool):
@@ -631,7 +594,7 @@ class CommandCenterTUI(App):
 
             def do_pull():
                 result = pull_from_remote(
-                    worktree_path,
+                    Path(ticket.worktree_path),
                     remote=config.default_git_remote,
                     branch=ticket.branch,
                 )
@@ -669,10 +632,8 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        worktree_path = self._resolve_worktree_path(ticket)
-
         # Fetch commit log
-        commits, error = get_commit_log(worktree_path, limit=20)
+        commits, error = get_commit_log(Path(ticket.worktree_path), limit=20)
 
         if error:
             self.push_screen(
@@ -691,9 +652,8 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        worktree_path = self._resolve_worktree_path(ticket)
         config = load_config()
-        build_command = config.get_build_command(worktree_path)
+        build_command = config.get_build_command(Path(ticket.worktree_path))
 
         # Create output dialog
         output_dialog = OutputDialog("Building", build_command)
@@ -711,7 +671,7 @@ class CommandCenterTUI(App):
 
         # Start the build
         run_build(
-            worktree_path,
+            Path(ticket.worktree_path),
             ticket.branch,
             on_output=on_output,
             on_complete=on_complete,
@@ -720,19 +680,109 @@ class CommandCenterTUI(App):
         # Show the dialog
         self.push_screen(output_dialog)
 
-    def action_api_request(self):
-        """Focus the API requests panel."""
+    def action_test(self):
+        """Trigger tests for selected ticket."""
         ticket = self._get_selected_ticket()
         if not ticket:
             self.notify("No ticket selected", severity="warning")
             return
 
-        # Focus the API panel
+        config = load_config()
+        test_command = config.get_test_command(Path(ticket.worktree_path))
+
+        # Create output dialog
+        output_dialog = OutputDialog("Running Tests", test_command)
+
+        # Callbacks for streaming
+        def on_output(line: str):
+            """Handle test output line."""
+            self.call_from_thread(output_dialog.append_output, line)
+
+        def on_complete(success: bool, message: str):
+            """Handle test completion."""
+            self.call_from_thread(output_dialog.set_complete, success, message)
+            # Refresh test status panel
+            self.call_from_thread(self.action_refresh)
+
+        # Start the tests
+        run_tests(
+            Path(ticket.worktree_path),
+            ticket.branch,
+            on_output=on_output,
+            on_complete=on_complete,
+        )
+
+        # Show the dialog
+        self.push_screen(output_dialog)
+
+    def action_files(self):
+        """Show file browser/preview for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        def on_file_action(result):
+            """Handle file browser result."""
+            if result and result.get("action") == "edit":
+                file_path = result.get("file_path")
+                if file_path:
+                    self._open_in_editor(file_path)
+
+        self.push_screen(
+            FileBrowserDialog(Path(ticket.worktree_path), ticket.branch),
+            on_file_action
+        )
+
+    def _open_in_editor(self, file_path: str):
+        """Open the workspace folder in the configured editor with the file selected."""
+        import subprocess
+        import os
+
+        config = load_config()
+
+        # Try to get editor from config, then environment, then default to cursor
+        editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "cursor"
+
         try:
-            api_panel = self.query_one("#api-panel")
-            api_panel.focus()
-        except Exception:
-            self.notify("API panel not available", severity="warning")
+            file_path_obj = Path(file_path)
+
+            # Find the git worktree root by looking for .git
+            worktree_root = file_path_obj.parent
+            while worktree_root != worktree_root.parent:  # Stop at filesystem root
+                if (worktree_root / ".git").exists():
+                    break
+                worktree_root = worktree_root.parent
+
+            # Open workspace folder with the file as an argument
+            # Use --goto file:line:column syntax if available, or just pass both folder and file
+            subprocess.run([editor, str(worktree_root), str(file_path)], check=False)
+            self.notify(f"Opened {file_path_obj.name} in {editor}", severity="information")
+        except Exception as e:
+            self.push_screen(
+                ErrorDialog("Failed to Open Editor", f"Could not open {editor}: {e}")
+            )
+
+    def action_api_request(self):
+        """Show API request builder for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        from ccc.tui.api_widgets import RequestBuilderDialog
+
+        def on_request_saved(result):
+            """Handle request save completion."""
+            if result and result.get("success"):
+                self.notify(result.get("message", "Request saved"), severity="information")
+                # Refresh the API panel
+                self.action_refresh()
+
+        self.push_screen(
+            RequestBuilderDialog(ticket.branch),
+            on_request_saved
+        )
 
 
 def run_tui():

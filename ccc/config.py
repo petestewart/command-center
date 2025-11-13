@@ -47,6 +47,9 @@ class Config:
     # Diff viewer configuration
     diff_viewer: str = "delta"  # Options: "delta", "diff-so-fancy", "git"
 
+    # Editor configuration (falls back to $EDITOR env var, then vim)
+    editor: Optional[str] = None
+
     # Phase 7: API Testing settings
     api_default_timeout: int = 30
     api_follow_redirects: bool = True
@@ -108,19 +111,6 @@ class Config:
             except Exception:
                 pass
 
-        # Check for setup.py (Python) - simple regex parsing
-        setup_py = worktree_path / "setup.py"
-        if setup_py.exists():
-            try:
-                with open(setup_py) as f:
-                    content = f.read()
-                    # Look for name="..." or name='...'
-                    match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
-                    if match:
-                        return match.group(1)
-            except Exception:
-                pass
-
         # Check for Cargo.toml (Rust) - simple regex parsing
         cargo_toml = worktree_path / "Cargo.toml"
         if cargo_toml.exists():
@@ -140,7 +130,7 @@ class Config:
         """
         Get the build command for a specific project.
 
-        Checks for project-specific override, auto-detects project type, falls back to default.
+        Checks for project-specific override, falls back to default.
 
         Args:
             worktree_path: Path to the worktree
@@ -148,38 +138,20 @@ class Config:
         Returns:
             Build command to execute
         """
-        worktree_path = Path(worktree_path)
         project_name = self.get_project_name(worktree_path)
 
-        # Check for project-specific override
         if project_name and self.project_commands:
             project_config = self.project_commands.get(project_name, {})
             if "build_command" in project_config:
                 return project_config["build_command"]
 
-        # Auto-detect project type and return appropriate build command
-        # Check for Node.js project
-        if (worktree_path / "package.json").exists():
-            return "npm run build"
-
-        # Check for Python project
-        if (worktree_path / "setup.py").exists():
-            return "python -m pytest"
-        if (worktree_path / "pyproject.toml").exists():
-            return "python -m pytest"
-
-        # Check for Rust project
-        if (worktree_path / "Cargo.toml").exists():
-            return "cargo build"
-
-        # Fall back to default (which is npm run build)
         return self.default_build_command
 
     def get_test_command(self, worktree_path: Path) -> str:
         """
         Get the test command for a specific project.
 
-        Checks for project-specific override, auto-detects project type, falls back to default.
+        Checks for project-specific override, falls back to default.
 
         Args:
             worktree_path: Path to the worktree
@@ -187,31 +159,13 @@ class Config:
         Returns:
             Test command to execute
         """
-        worktree_path = Path(worktree_path)
         project_name = self.get_project_name(worktree_path)
 
-        # Check for project-specific override
         if project_name and self.project_commands:
             project_config = self.project_commands.get(project_name, {})
             if "test_command" in project_config:
                 return project_config["test_command"]
 
-        # Auto-detect project type and return appropriate test command
-        # Check for Node.js project
-        if (worktree_path / "package.json").exists():
-            return "npm test"
-
-        # Check for Python project
-        if (worktree_path / "setup.py").exists():
-            return "python -m pytest"
-        if (worktree_path / "pyproject.toml").exists():
-            return "python -m pytest"
-
-        # Check for Rust project
-        if (worktree_path / "Cargo.toml").exists():
-            return "cargo test"
-
-        # Fall back to default
         return self.default_test_command
 
     def to_dict(self) -> Dict[str, Any]:
@@ -273,6 +227,7 @@ def load_config() -> Config:
             ),
             project_commands=data.get("project_commands"),
             diff_viewer=data.get("diff_viewer", Config.diff_viewer),
+            editor=data.get("editor"),
             api_default_timeout=data.get("api_default_timeout", Config.api_default_timeout),
             api_follow_redirects=data.get("api_follow_redirects", Config.api_follow_redirects),
             api_max_history_entries=data.get("api_max_history_entries", Config.api_max_history_entries),

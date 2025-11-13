@@ -11,6 +11,7 @@ from ccc.tui.dialogs import (
     CommitDialog,
     LogDialog,
     OutputDialog,
+    FileBrowserDialog,
 )
 
 from ccc.tui.widgets import (
@@ -31,6 +32,7 @@ __all__ = [
     "CommitDialog",
     "LogDialog",
     "OutputDialog",
+    "FileBrowserDialog",
     "FileCheckboxList",
     "MultiLineInput",
     "LogViewer",
