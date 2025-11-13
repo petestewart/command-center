@@ -7,7 +7,7 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Static, Button, Label, LoadingIndicator
+from textual.widgets import Static, Button, Label, LoadingIndicator, RichLog
 from textual.binding import Binding
 from textual import work
 
@@ -163,7 +163,9 @@ class ConfirmDialog(BaseDialog):
             id: The ID of the dialog in the DOM
             classes: The CSS classes for the dialog
         """
-        super().__init__(title=title, content=message, name=name, id=id, classes=classes)
+        super().__init__(
+            title=title, content=message, name=name, id=id, classes=classes
+        )
         self.yes_label = yes_label
         self.no_label = no_label
 
@@ -224,7 +226,9 @@ class MessageDialog(BaseDialog):
             id: The ID of the dialog in the DOM
             classes: The CSS classes for the dialog
         """
-        super().__init__(title=title, content=message, name=name, id=id, classes=classes)
+        super().__init__(
+            title=title, content=message, name=name, id=id, classes=classes
+        )
         self.ok_label = ok_label
         self.variant = variant
 
@@ -314,6 +318,7 @@ class SuccessDialog(MessageDialog):
             id=id,
             classes=classes,
         )
+
 
 class CommitDialog(BaseDialog):
     """
@@ -443,7 +448,9 @@ class CommitDialog(BaseDialog):
         selected_files = self._file_list.get_selected_files()
         if not selected_files:
             self.app.push_screen(
-                ErrorDialog("No Files Selected", "Please select at least one file to commit.")
+                ErrorDialog(
+                    "No Files Selected", "Please select at least one file to commit."
+                )
             )
             return
 
@@ -467,11 +474,13 @@ class CommitDialog(BaseDialog):
     def _on_commit_complete(self, result) -> None:
         """Handle commit completion."""
         if result.success:
-            self.dismiss({
-                "success": True,
-                "message": result.message,
-                "output": result.output,
-            })
+            self.dismiss(
+                {
+                    "success": True,
+                    "message": result.message,
+                    "output": result.output,
+                }
+            )
         else:
             self.app.push_screen(ErrorDialog("Commit Failed", result.message))
 
@@ -654,7 +663,9 @@ class OutputDialog(BaseDialog):
         # Update status
         if self._status_label:
             if success:
-                self._status_label.update(f"[green]✓ {message or 'Completed successfully'}[/green]")
+                self._status_label.update(
+                    f"[green]✓ {message or 'Completed successfully'}[/green]"
+                )
             else:
                 self._status_label.update(f"[red]✗ {message or 'Failed'}[/red]")
 
@@ -665,10 +676,12 @@ class OutputDialog(BaseDialog):
     def action_close(self) -> None:
         """Handle close action (only if not running)."""
         if not self._is_running:
-            self.dismiss({
-                "success": True,
-                "output": self._output.get_lines() if self._output else [],
-            })
+            self.dismiss(
+                {
+                    "success": True,
+                    "output": self._output.get_lines() if self._output else [],
+                }
+            )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press."""
@@ -694,24 +707,25 @@ class FileBrowserDialog(BaseDialog):
         Binding("k", "prev_file", "Prev File", show=False),
         Binding("e", "open_editor", "Edit", show=True),
         Binding("enter", "open_editor", "Edit", show=False),
-        Binding("g", "open_editor_at_line", "Go to line", show=True),
     ]
 
     DEFAULT_CSS = """
     FileBrowserDialog > Container {
-        max-width: 140;
+        width: 80%;
+        max-width: 80%;
         max-height: 95%;
+
     }
 
-    FileBrowserDialog > Container > Horizontal {
+    FileBrowserDialog .content-area {
         height: 1fr;
+        width: 100%;
     }
 
     FileBrowserDialog .file-list-container {
         width: 30;
         height: 100%;
         border-right: solid $primary;
-        padding: 0 1;
     }
 
     FileBrowserDialog .file-list-item {
@@ -725,20 +739,25 @@ class FileBrowserDialog(BaseDialog):
     }
 
     FileBrowserDialog .diff-container {
-        width: 1fr;
+        width: 250;
         height: 100%;
-        padding: 0 1;
     }
 
     FileBrowserDialog .diff-header {
         width: 100%;
         text-style: bold;
         margin-bottom: 1;
+        padding: 0 1;
     }
 
-    FileBrowserDialog .diff-content {
+    FileBrowserDialog RichLog#diff-content {
         width: 100%;
         height: 1fr;
+        border: none;
+        background: transparent;
+        padding: 0 1;
+        overflow-x: hidden;
+        overflow-y: auto;
     }
 
     FileBrowserDialog .no-files {
@@ -777,7 +796,9 @@ class FileBrowserDialog(BaseDialog):
         self.branch_name = branch_name
         self.files: List[GitFile] = []
         self.selected_index = 0
-        self._first_changed_line: Optional[int] = None  # Track first changed line from diff
+        self._first_changed_line: Optional[int] = (
+            None  # Track first changed line from diff
+        )
 
     def compose_content(self) -> ComposeResult:
         """Create the dialog content."""
@@ -791,7 +812,7 @@ class FileBrowserDialog(BaseDialog):
         elif not self.files:
             yield Static("[dim]No changed files[/dim]", classes="no-files")
         else:
-            with Horizontal():
+            with Horizontal(classes="content-area"):
                 # File list on the left
                 with VerticalScroll(classes="file-list-container"):
                     for idx, file in enumerate(self.files):
@@ -808,10 +829,10 @@ class FileBrowserDialog(BaseDialog):
                 # Diff display on the right
                 with Container(classes="diff-container"):
                     yield Static("", classes="diff-header", id="diff-header")
-                    yield VerticalScroll(
-                        Static("", classes="diff-content"),
+                    yield RichLog(
+                        wrap=True,
+                        id="diff-content",
                         classes="diff-content",
-                        id="diff-scroll",
                     )
 
     def on_mount(self) -> None:
@@ -852,10 +873,13 @@ class FileBrowserDialog(BaseDialog):
 
         # Get and display diff
         diff_content = self._get_diff(file)
-        diff_scroll = self.query_one("#diff-scroll", VerticalScroll)
-        diff_static = diff_scroll.query_one(Static)
-        diff_static.update(diff_content)
-        diff_scroll.scroll_home()
+        diff_log = self.query_one("#diff-content", RichLog)
+        diff_log.clear()
+        # Use Text.from_markup to properly parse Rich markup tags
+        from rich.text import Text
+
+        formatted_text = Text.from_markup(diff_content)
+        diff_log.write(formatted_text, expand=False)
 
     def _get_diff(self, file: GitFile) -> str:
         """Get the diff for a file."""
@@ -869,22 +893,22 @@ class FileBrowserDialog(BaseDialog):
         self._first_changed_line = None
 
         try:
-            # Try to use configured diff viewer
+            # Try to use configured diff viewer (but don't use --color=always to avoid ANSI codes in output)
             if config.diff_viewer == "delta" and self._has_command("delta"):
                 result = subprocess.run(
-                    ["git", "diff", "--color=always", file.path],
+                    ["git", "diff", file.path],
                     cwd=str(self.worktree_path),
                     capture_output=True,
                     text=True,
                     timeout=5,
                 )
                 if result.returncode == 0:
-                    # Extract line number from diff before delta formatting
+                    # Extract line number from diff before formatting
                     self._extract_first_changed_line(result.stdout)
-                    # Delta adds ANSI colors, which Rich can render
-                    return result.stdout or "[dim]No changes to display[/dim]"
+                    # Format with Rich markup instead of ANSI codes
+                    return self._format_diff(result.stdout)
 
-            # Fall back to git diff
+            # Fall back to git diff (no color)
             result = subprocess.run(
                 ["git", "diff", file.path],
                 cwd=str(self.worktree_path),
@@ -931,7 +955,7 @@ class FileBrowserDialog(BaseDialog):
 
         # Look for hunk headers like @@ -10,7 +10,8 @@
         # The format is: @@ -old_start,old_count +new_start,new_count @@
-        hunk_pattern = r'@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@'
+        hunk_pattern = r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@"
 
         match = re.search(hunk_pattern, diff_text)
         if match:
@@ -940,6 +964,7 @@ class FileBrowserDialog(BaseDialog):
     def _has_command(self, command: str) -> bool:
         """Check if a command is available."""
         import subprocess
+
         try:
             subprocess.run(
                 ["which", command],
@@ -954,14 +979,22 @@ class FileBrowserDialog(BaseDialog):
         """Format diff text with syntax highlighting."""
         lines = []
         for line in diff_text.split("\n"):
-            if line.startswith("+"):
+            # Handle file headers first (before +/- checks)
+            if line.startswith("diff --git"):
+                lines.append(f"[bold]{line}[/bold]")
+            elif line.startswith("index "):
+                lines.append(f"[dim]{line}[/dim]")
+            elif line.startswith("---"):
+                lines.append(f"[dim]{line}[/dim]")
+            elif line.startswith("+++"):
+                lines.append(f"[dim]{line}[/dim]")
+            elif line.startswith("@@"):
+                lines.append(f"[cyan]{line}[/cyan]")
+            # Then handle actual diff content
+            elif line.startswith("+"):
                 lines.append(f"[green]{line}[/green]")
             elif line.startswith("-"):
                 lines.append(f"[red]{line}[/red]")
-            elif line.startswith("@@"):
-                lines.append(f"[cyan]{line}[/cyan]")
-            elif line.startswith("diff --git"):
-                lines.append(f"[bold]{line}[/bold]")
             else:
                 lines.append(line)
         return "\n".join(lines)
@@ -970,7 +1003,6 @@ class FileBrowserDialog(BaseDialog):
         """Add action buttons."""
         with Horizontal(classes="dialog-buttons"):
             yield Button("Edit (e)", variant="primary", id="edit")
-            yield Button("Go to Line (g)", variant="default", id="goto")
             yield Button("Close (q)", variant="default", id="close")
 
     def action_next_file(self) -> None:
@@ -984,22 +1016,6 @@ class FileBrowserDialog(BaseDialog):
             self._show_diff(self.selected_index - 1)
 
     def action_open_editor(self) -> None:
-        """Open the selected file in editor."""
-        if not self.files:
-            return
-
-        file = self.files[self.selected_index]
-        file_path = self.worktree_path / file.path
-
-        # Dismiss dialog with file path and optional line number
-        self.dismiss({
-            "action": "edit",
-            "file_path": str(file_path),
-            "line": self._first_changed_line,
-            "worktree_root": str(self.worktree_path),
-        })
-
-    def action_open_editor_at_line(self) -> None:
         """Open the selected file in editor at the first changed line."""
         if not self.files:
             return
@@ -1007,16 +1023,15 @@ class FileBrowserDialog(BaseDialog):
         file = self.files[self.selected_index]
         file_path = self.worktree_path / file.path
 
-        # Use the first changed line if available, otherwise just open the file
-        line = self._first_changed_line
-
         # Dismiss dialog with file path and line number
-        self.dismiss({
-            "action": "edit",
-            "file_path": str(file_path),
-            "line": line,
-            "worktree_root": str(self.worktree_path),
-        })
+        self.dismiss(
+            {
+                "action": "edit",
+                "file_path": str(file_path),
+                "line": self._first_changed_line,
+                "worktree_root": str(self.worktree_path),
+            }
+        )
 
     def action_dismiss(self) -> None:
         """Handle escape/q key press."""
@@ -1026,8 +1041,6 @@ class FileBrowserDialog(BaseDialog):
         """Handle button presses."""
         if event.button.id == "edit":
             self.action_open_editor()
-        elif event.button.id == "goto":
-            self.action_open_editor_at_line()
         else:
             self.dismiss(None)
 
@@ -1163,11 +1176,13 @@ class AddTodoDialog(BaseDialog):
 
         assign = assign_input.value.strip() if assign_input.value else None
 
-        self.dismiss({
-            "description": description,
-            "estimate": estimate,
-            "assign": assign,
-        })
+        self.dismiss(
+            {
+                "description": description,
+                "estimate": estimate,
+                "assign": assign,
+            }
+        )
 
 
 class EditTodoDialog(BaseDialog):
@@ -1239,10 +1254,7 @@ class EditTodoDialog(BaseDialog):
 
         with Vertical(classes="input-group"):
             yield Label("Description:", classes="input-label")
-            description_input = Input(
-                value=self.current_description,
-                id="description"
-            )
+            description_input = Input(value=self.current_description, id="description")
             yield description_input
 
     def compose_buttons(self) -> ComposeResult:
@@ -1268,10 +1280,12 @@ class EditTodoDialog(BaseDialog):
         if not description:
             return
 
-        self.dismiss({
-            "task_id": self.task_id,
-            "description": description,
-        })
+        self.dismiss(
+            {
+                "task_id": self.task_id,
+                "description": description,
+            }
+        )
 
 
 class AssignTodoDialog(BaseDialog):
@@ -1336,15 +1350,12 @@ class AssignTodoDialog(BaseDialog):
         agent_input = Input(
             value=self.current_agent or "",
             placeholder="Enter agent name (e.g., agent-1)",
-            id="agent"
+            id="agent",
         )
         yield agent_input
 
         if self.current_agent:
-            yield Static(
-                "[dim]Leave empty to unassign[/dim]",
-                classes="input-label"
-            )
+            yield Static("[dim]Leave empty to unassign[/dim]", classes="input-label")
 
     def compose_buttons(self) -> ComposeResult:
         """Add Assign/Cancel buttons."""
@@ -1366,10 +1377,12 @@ class AssignTodoDialog(BaseDialog):
         agent_input = self.query_one("#agent", Input)
         agent = agent_input.value.strip() or None
 
-        self.dismiss({
-            "task_id": self.task_id,
-            "agent": agent,
-        })
+        self.dismiss(
+            {
+                "task_id": self.task_id,
+                "agent": agent,
+            }
+        )
 
 
 class BlockTodoDialog(BaseDialog):
@@ -1439,7 +1452,7 @@ class BlockTodoDialog(BaseDialog):
 
         yield Static(
             "This task will be blocked until another task is completed.",
-            classes="help-text"
+            classes="help-text",
         )
 
         yield Label("Blocking task ID:", classes="input-label")
@@ -1447,15 +1460,12 @@ class BlockTodoDialog(BaseDialog):
             value=str(self.current_blocked_by) if self.current_blocked_by else "",
             placeholder="Enter task ID that blocks this task",
             id="blocked_by",
-            type="integer"
+            type="integer",
         )
         yield blocked_input
 
         if self.current_blocked_by:
-            yield Static(
-                "[dim]Leave empty to unblock[/dim]",
-                classes="help-text"
-            )
+            yield Static("[dim]Leave empty to unblock[/dim]", classes="help-text")
 
     def compose_buttons(self) -> ComposeResult:
         """Add Block/Cancel buttons."""
@@ -1482,7 +1492,9 @@ class BlockTodoDialog(BaseDialog):
             # Invalid input
             return
 
-        self.dismiss({
-            "task_id": self.task_id,
-            "blocked_by": blocked_by,
-        })
+        self.dismiss(
+            {
+                "task_id": self.task_id,
+                "blocked_by": blocked_by,
+            }
+        )
