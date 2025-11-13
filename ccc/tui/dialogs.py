@@ -565,7 +565,7 @@ class OutputDialog(BaseDialog):
     """
 
     BINDINGS = [
-        Binding("escape", "close", "Close", show=False),
+        Binding("escape", "force_close", "Close", show=False),
         Binding("q", "close", "Close", show=False),
     ]
 
@@ -682,6 +682,17 @@ class OutputDialog(BaseDialog):
                     "output": self._output.get_lines() if self._output else [],
                 }
             )
+
+    def action_force_close(self) -> None:
+        """Handle force close action (works even when running)."""
+        # Allow closing even when running
+        self.dismiss(
+            {
+                "success": False,
+                "output": self._output.get_lines() if self._output else [],
+                "cancelled": True,
+            }
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press."""
