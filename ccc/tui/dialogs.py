@@ -694,6 +694,7 @@ class FileBrowserDialog(BaseDialog):
         Binding("k", "prev_file", "Prev File", show=False),
         Binding("e", "open_editor", "Edit", show=True),
         Binding("enter", "open_editor", "Edit", show=False),
+        Binding("g", "open_editor_at_line", "Go to line", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -776,6 +777,7 @@ class FileBrowserDialog(BaseDialog):
         self.branch_name = branch_name
         self.files: List[GitFile] = []
         self.selected_index = 0
+        self._first_changed_line: Optional[int] = None  # Track first changed line from diff
 
     def compose_content(self) -> ComposeResult:
         """Create the dialog content."""
@@ -858,9 +860,13 @@ class FileBrowserDialog(BaseDialog):
     def _get_diff(self, file: GitFile) -> str:
         """Get the diff for a file."""
         import subprocess
+        import re
         from ccc.config import load_config
 
         config = load_config()
+
+        # Reset first changed line
+        self._first_changed_line = None
 
         try:
             # Try to use configured diff viewer
@@ -873,6 +879,8 @@ class FileBrowserDialog(BaseDialog):
                     timeout=5,
                 )
                 if result.returncode == 0:
+                    # Extract line number from diff before delta formatting
+                    self._extract_first_changed_line(result.stdout)
                     # Delta adds ANSI colors, which Rich can render
                     return result.stdout or "[dim]No changes to display[/dim]"
 
@@ -894,10 +902,14 @@ class FileBrowserDialog(BaseDialog):
                             file_path = self.worktree_path / file.path
                             with open(file_path, "r") as f:
                                 content = f.read()
+                                self._first_changed_line = 1  # Start of new file
                                 return f"[green]+ New file content:[/green]\n{content[:1000]}"
                         except Exception:
                             return "[dim]Cannot read file[/dim]"
                     return "[dim]No changes to display[/dim]"
+
+                # Extract first changed line number
+                self._extract_first_changed_line(diff_text)
 
                 # Format diff with colors
                 return self._format_diff(diff_text)
@@ -908,6 +920,22 @@ class FileBrowserDialog(BaseDialog):
             return "[red]Diff command timed out[/red]"
         except Exception as e:
             return f"[red]Error: {e}[/red]"
+
+    def _extract_first_changed_line(self, diff_text: str) -> None:
+        """
+        Extract the first changed line number from a diff.
+
+        Updates self._first_changed_line with the line number.
+        """
+        import re
+
+        # Look for hunk headers like @@ -10,7 +10,8 @@
+        # The format is: @@ -old_start,old_count +new_start,new_count @@
+        hunk_pattern = r'@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@'
+
+        match = re.search(hunk_pattern, diff_text)
+        if match:
+            self._first_changed_line = int(match.group(1))
 
     def _has_command(self, command: str) -> bool:
         """Check if a command is available."""
@@ -942,6 +970,7 @@ class FileBrowserDialog(BaseDialog):
         """Add action buttons."""
         with Horizontal(classes="dialog-buttons"):
             yield Button("Edit (e)", variant="primary", id="edit")
+            yield Button("Go to Line (g)", variant="default", id="goto")
             yield Button("Close (q)", variant="default", id="close")
 
     def action_next_file(self) -> None:
@@ -962,10 +991,31 @@ class FileBrowserDialog(BaseDialog):
         file = self.files[self.selected_index]
         file_path = self.worktree_path / file.path
 
-        # Dismiss dialog with file path to open
+        # Dismiss dialog with file path and optional line number
         self.dismiss({
             "action": "edit",
             "file_path": str(file_path),
+            "line": self._first_changed_line,
+            "worktree_root": str(self.worktree_path),
+        })
+
+    def action_open_editor_at_line(self) -> None:
+        """Open the selected file in editor at the first changed line."""
+        if not self.files:
+            return
+
+        file = self.files[self.selected_index]
+        file_path = self.worktree_path / file.path
+
+        # Use the first changed line if available, otherwise just open the file
+        line = self._first_changed_line
+
+        # Dismiss dialog with file path and line number
+        self.dismiss({
+            "action": "edit",
+            "file_path": str(file_path),
+            "line": line,
+            "worktree_root": str(self.worktree_path),
         })
 
     def action_dismiss(self) -> None:
@@ -976,6 +1026,8 @@ class FileBrowserDialog(BaseDialog):
         """Handle button presses."""
         if event.button.id == "edit":
             self.action_open_editor()
+        elif event.button.id == "goto":
+            self.action_open_editor_at_line()
         else:
             self.dismiss(None)
 
