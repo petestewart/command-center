@@ -783,41 +783,62 @@ class CommandCenterTUI(App):
             """Handle file browser result."""
             if result and result.get("action") == "edit":
                 file_path = result.get("file_path")
+                line = result.get("line")
+                worktree_root = result.get("worktree_root")
                 if file_path:
-                    self._open_in_editor(file_path)
+                    self._open_in_editor(file_path, line=line, worktree_root=worktree_root)
 
         self.push_screen(
             FileBrowserDialog(Path(ticket.worktree_path), ticket.branch),
             on_file_action
         )
 
-    def _open_in_editor(self, file_path: str):
-        """Open the workspace folder in the configured editor with the file selected."""
-        import subprocess
-        import os
+    def _open_in_editor(
+        self,
+        file_path: str,
+        line: Optional[int] = None,
+        worktree_root: Optional[str] = None
+    ):
+        """
+        Open a file in the configured editor.
+
+        Args:
+            file_path: Path to the file to open
+            line: Optional line number to jump to
+            worktree_root: Optional worktree root directory
+        """
+        from ccc.editor_manager import open_in_editor
 
         config = load_config()
 
-        # Try to get editor from config, then environment, then default to cursor
-        editor = getattr(config, "editor", None) or os.environ.get("EDITOR") or "cursor"
+        # Get editor from config
+        config_editor = getattr(config, "editor", None)
 
-        try:
-            file_path_obj = Path(file_path)
+        # Convert paths
+        file_path_obj = Path(file_path)
+        worktree_root_obj = Path(worktree_root) if worktree_root else None
 
-            # Find the git worktree root by looking for .git
-            worktree_root = file_path_obj.parent
-            while worktree_root != worktree_root.parent:  # Stop at filesystem root
-                if (worktree_root / ".git").exists():
+        # If no worktree root provided, try to find it
+        if not worktree_root_obj:
+            worktree_root_obj = file_path_obj.parent
+            while worktree_root_obj != worktree_root_obj.parent:
+                if (worktree_root_obj / ".git").exists():
                     break
-                worktree_root = worktree_root.parent
+                worktree_root_obj = worktree_root_obj.parent
 
-            # Open workspace folder with the file as an argument
-            # Use --goto file:line:column syntax if available, or just pass both folder and file
-            subprocess.run([editor, str(worktree_root), str(file_path)], check=False)
-            self.notify(f"Opened {file_path_obj.name} in {editor}", severity="information")
-        except Exception as e:
+        # Open file using editor manager
+        success, message = open_in_editor(
+            file_path_obj,
+            line=line,
+            worktree_root=worktree_root_obj,
+            config_editor=config_editor
+        )
+
+        if success:
+            self.notify(message, severity="information")
+        else:
             self.push_screen(
-                ErrorDialog("Failed to Open Editor", f"Could not open {editor}: {e}")
+                ErrorDialog("Failed to Open Editor", message)
             )
 
     def action_api_request(self):
