@@ -747,6 +747,389 @@ def test_show(branch_name: str):
     console.print()
 
 
+@cli.group()
+def api():
+    """Manage API requests for testing."""
+    pass
+
+
+@api.command("add")
+@click.argument("branch_name")
+@click.argument("request_name")
+@click.option("--method", "-m", type=click.Choice(["GET", "POST", "PUT", "PATCH", "DELETE"]), default="GET", help="HTTP method")
+@click.option("--url", "-u", help="Request URL")
+@click.option("--header", "-H", multiple=True, help="Header in format 'Key: Value'")
+@click.option("--body", "-b", help="Request body")
+@click.option("--expected-status", "-s", type=int, help="Expected status code")
+def api_add(branch_name: str, request_name: str, method: str, url: Optional[str], header: tuple, body: Optional[str], expected_status: Optional[int]):
+    """
+    Add a new API request.
+
+    \b
+    Examples:
+        ccc api add feature/api --method POST --url "http://localhost:3000/api/users"
+        ccc api add feature/api --method GET --url "{{base_url}}/api/users" --header "Accept: application/json"
+    """
+    from ccc.api_testing import add_request, load_requests
+    from ccc.api_request import ApiRequest, HttpMethod
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Check if request already exists
+    existing_requests, _ = load_requests(branch_name)
+    if any(req.name == request_name for req in existing_requests):
+        print_error(f"Request '{request_name}' already exists")
+        sys.exit(1)
+
+    # Interactive mode if URL not provided
+    if not url:
+        url = console.input("URL: ").strip()
+        if not url:
+            print_error("URL is required")
+            sys.exit(1)
+
+    # Parse headers
+    headers_dict = {}
+    for h in header:
+        if ": " in h:
+            key, value = h.split(": ", 1)
+            headers_dict[key] = value
+
+    # Create request
+    request = ApiRequest(
+        name=request_name,
+        method=HttpMethod.from_string(method),
+        url=url,
+        headers=headers_dict,
+        body=body,
+        expected_status=expected_status,
+    )
+
+    if add_request(branch_name, request):
+        print_success(f"Added API request '{request_name}'")
+        print_info(f"Method: {method}")
+        print_info(f"URL: {url}")
+    else:
+        print_error("Failed to add request")
+        sys.exit(1)
+
+
+@api.command("list")
+@click.argument("branch_name")
+def api_list(branch_name: str):
+    """
+    List all API requests for a branch.
+
+    \b
+    Examples:
+        ccc api list feature/api-testing
+    """
+    from ccc.api_testing import load_requests
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    requests_list, variables = load_requests(branch_name)
+
+    if not requests_list:
+        print_info(f"No API requests found for branch '{branch_name}'")
+        print_info("Use 'ccc api add' to create one")
+        return
+
+    # Create table
+    table = Table(title=f"API Requests ({len(requests_list)})", show_header=True)
+    table.add_column("Name", style="cyan")
+    table.add_column("Method", style="blue")
+    table.add_column("URL", style="white")
+    table.add_column("Expected", style="yellow")
+    table.add_column("Last Run", style="green")
+
+    for req in requests_list:
+        last_run = format_time_ago(req.last_executed) if req.last_executed else "Never"
+        expected = str(req.expected_status) if req.expected_status else "-"
+
+        # Truncate URL if too long
+        url_display = req.url[:50] + "..." if len(req.url) > 50 else req.url
+
+        table.add_row(
+            req.name,
+            req.method.value,
+            url_display,
+            expected,
+            last_run,
+        )
+
+    console.print(table)
+
+    # Show variables if any
+    if variables.variables:
+        console.print(f"\n[bold]Variables ({len(variables.variables)}):[/bold]")
+        for key, value in variables.variables.items():
+            # Mask sensitive values (containing 'token', 'key', 'secret', 'password')
+            if any(word in key.lower() for word in ['token', 'key', 'secret', 'password']):
+                masked_value = value[:4] + "***" if len(value) > 4 else "***"
+                console.print(f"  {key}: {masked_value}")
+            else:
+                console.print(f"  {key}: {value}")
+        console.print()
+
+
+@api.command("run")
+@click.argument("branch_name")
+@click.argument("request_name")
+def api_run(branch_name: str, request_name: str):
+    """
+    Execute an API request.
+
+    \b
+    Examples:
+        ccc api run feature/api-testing "Get users"
+    """
+    from ccc.api_testing import execute_request_by_name
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    console.print(f"\n[bold]Executing: {request_name}[/bold]\n")
+
+    response, error = execute_request_by_name(branch_name, request_name)
+
+    if error:
+        print_error(f"Request failed: {error}")
+        sys.exit(1)
+
+    if response:
+        # Display response
+        status_color = response.status_color()
+        console.print(f"Status: [{status_color}]{response.status_code} {response.reason}[/]")
+        console.print(f"Time: {response.elapsed_ms:.0f}ms")
+        console.print()
+
+        # Show headers
+        console.print("[bold]Headers:[/bold]")
+        for key, value in list(response.headers.items())[:5]:  # Show first 5 headers
+            console.print(f"  {key}: {value}")
+        if len(response.headers) > 5:
+            console.print(f"  ... and {len(response.headers) - 5} more")
+        console.print()
+
+        # Show body
+        console.print("[bold]Body:[/bold]")
+        formatted_body = response.get_formatted_body()
+        # Truncate if too long
+        if len(formatted_body) > 500:
+            console.print(formatted_body[:500])
+            console.print(f"\n... (truncated, {len(formatted_body)} total characters)")
+        else:
+            console.print(formatted_body)
+        console.print()
+
+        print_success("Request completed successfully")
+
+
+@api.command("delete")
+@click.argument("branch_name")
+@click.argument("request_name")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def api_delete(branch_name: str, request_name: str, force: bool):
+    """
+    Delete an API request.
+
+    \b
+    Examples:
+        ccc api delete feature/api-testing "Get users"
+    """
+    from ccc.api_testing import delete_request, get_request
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    # Check if request exists
+    request = get_request(branch_name, request_name)
+    if not request:
+        print_error(f"Request '{request_name}' not found")
+        sys.exit(1)
+
+    # Confirm deletion
+    if not force:
+        console.print(f"\n[bold yellow]About to delete API request:[/bold yellow]")
+        console.print(f"  Name: {request.name}")
+        console.print(f"  Method: {request.method.value}")
+        console.print(f"  URL: {request.url}")
+
+        if not confirm("\nAre you sure you want to delete this request?"):
+            print_info("Deletion cancelled")
+            return
+
+    if delete_request(branch_name, request_name):
+        print_success(f"Deleted API request '{request_name}'")
+    else:
+        print_error("Failed to delete request")
+        sys.exit(1)
+
+
+@api.command("history")
+@click.argument("branch_name")
+@click.option("--limit", "-n", type=int, default=10, help="Number of entries to show")
+@click.option("--clear", is_flag=True, help="Clear all history")
+def api_history(branch_name: str, limit: int, clear: bool):
+    """
+    Show or clear execution history.
+
+    \b
+    Examples:
+        ccc api history feature/api-testing
+        ccc api history feature/api-testing --limit 20
+        ccc api history feature/api-testing --clear
+    """
+    from ccc.api_testing import load_history, clear_history
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    if clear:
+        if confirm("Clear all API request history?"):
+            clear_history(branch_name)
+            print_success("History cleared")
+        return
+
+    history = load_history(branch_name, limit=limit)
+
+    if not history:
+        print_info(f"No execution history for branch '{branch_name}'")
+        return
+
+    # Create table
+    table = Table(title=f"API Request History ({len(history)} recent)", show_header=True)
+    table.add_column("Time", style="yellow")
+    table.add_column("Request", style="cyan")
+    table.add_column("Method", style="blue")
+    table.add_column("Status", style="white")
+    table.add_column("Result", style="green")
+
+    for exec_data in history:
+        time_str = format_time_ago(exec_data.timestamp)
+
+        if exec_data.response:
+            status = str(exec_data.response.status_code)
+            result = "✓ Success" if exec_data.response.is_success() else "✗ Error"
+        else:
+            status = "-"
+            result = f"✗ {exec_data.error[:30]}" if exec_data.error else "✗ Failed"
+
+        table.add_row(
+            time_str,
+            exec_data.request_name,
+            exec_data.method,
+            status,
+            result,
+        )
+
+    console.print(table)
+    console.print()
+
+
+@api.group("var")
+def api_var():
+    """Manage variables for request substitution."""
+    pass
+
+
+@api_var.command("set")
+@click.argument("branch_name")
+@click.argument("key")
+@click.argument("value")
+def api_var_set(branch_name: str, key: str, value: str):
+    """
+    Set a variable value.
+
+    \b
+    Examples:
+        ccc api var set feature/api-testing base_url "http://localhost:3000"
+        ccc api var set feature/api-testing api_token "abc123"
+    """
+    from ccc.api_testing import set_variable
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    set_variable(branch_name, key, value)
+    print_success(f"Set variable '{key}' = '{value}'")
+
+
+@api_var.command("list")
+@click.argument("branch_name")
+def api_var_list(branch_name: str):
+    """
+    List all variables.
+
+    \b
+    Examples:
+        ccc api var list feature/api-testing
+    """
+    from ccc.api_testing import load_requests
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    _, variables = load_requests(branch_name)
+
+    if not variables.variables:
+        print_info("No variables defined")
+        print_info("Use 'ccc api var set' to create one")
+        return
+
+    console.print(f"\n[bold]Variables ({len(variables.variables)}):[/bold]\n")
+    for key, value in variables.variables.items():
+        # Mask sensitive values
+        if any(word in key.lower() for word in ['token', 'key', 'secret', 'password']):
+            masked_value = value[:4] + "***" if len(value) > 4 else "***"
+            console.print(f"  {key}: {masked_value}")
+        else:
+            console.print(f"  {key}: {value}")
+    console.print()
+
+
+@api_var.command("delete")
+@click.argument("branch_name")
+@click.argument("key")
+def api_var_delete(branch_name: str, key: str):
+    """
+    Delete a variable.
+
+    \b
+    Examples:
+        ccc api var delete feature/api-testing api_token
+    """
+    from ccc.api_testing import delete_variable
+
+    registry = TicketRegistry()
+    if not registry.exists(branch_name):
+        print_error(f"Branch '{branch_name}' not found")
+        sys.exit(1)
+
+    if delete_variable(branch_name, key):
+        print_success(f"Deleted variable '{key}'")
+    else:
+        print_error(f"Variable '{key}' not found")
+        sys.exit(1)
+
+
 @cli.command()
 def config():
     """Initialize or reconfigure Command Center."""

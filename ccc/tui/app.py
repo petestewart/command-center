@@ -274,6 +274,9 @@ class TicketDetailView(VerticalScroll):
             # Phase 4: Add todo panel
             from ccc.tui.widgets import TodoListWidget
             yield TodoListWidget("", id="todo-panel", classes="status-panel")
+            # Phase 7: Add API request panel
+            from ccc.tui.api_widgets import ApiRequestListPanel
+            yield ApiRequestListPanel(branch_name="", id="api-panel", classes="status-panel")
 
     def watch_branch_name(self, branch_name: Optional[str]):
         """Update when branch_name changes."""
@@ -322,6 +325,12 @@ class TicketDetailView(VerticalScroll):
         # Only focus on initial load, not on refresh
         todo_panel.focus()
 
+        # Phase 7: Update API panel
+        from ccc.tui.api_widgets import ApiRequestListPanel
+        api_panel = self.query_one("#api-panel", ApiRequestListPanel)
+        api_panel.branch_name = self.ticket.branch
+        api_panel.refresh_requests()
+
     def refresh_status(self):
         """Manually refresh all status panels."""
         # Call update_panels but don't pass focus_on_load flag
@@ -350,6 +359,11 @@ class TicketDetailView(VerticalScroll):
         # Refresh todo panel content only, don't refocus
         todo_panel = self.query_one("#todo-panel", TodoListWidget)
         todo_panel.refresh_content()
+
+        # Phase 7: Refresh API panel
+        from ccc.tui.api_widgets import ApiRequestListPanel
+        api_panel = self.query_one("#api-panel", ApiRequestListPanel)
+        api_panel.refresh_requests()
 
 
 class CommandCenterTUI(App):
@@ -384,6 +398,11 @@ class CommandCenterTUI(App):
         padding: 1;
     }
 
+    .status-panel:focus {
+        border: solid $primary;
+        background: $boost;
+    }
+
     #ticket-header {
         margin-bottom: 1;
         padding: 1;
@@ -406,6 +425,8 @@ class CommandCenterTUI(App):
         # Phase 3 Week 2: Tests & Files
         Binding("t", "test", "Test"),
         Binding("f", "files", "Files"),
+        # Phase 7: API Testing
+        Binding("a", "api_request", "API"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -794,6 +815,27 @@ class CommandCenterTUI(App):
             self.push_screen(
                 ErrorDialog("Failed to Open Editor", f"Could not open {editor}: {e}")
             )
+
+    def action_api_request(self):
+        """Show API request builder for selected ticket."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        from ccc.tui.api_widgets import RequestBuilderDialog
+
+        def on_request_saved(result):
+            """Handle request save completion."""
+            if result and result.get("success"):
+                self.notify(result.get("message", "Request saved"), severity="information")
+                # Refresh the API panel
+                self.action_refresh()
+
+        self.push_screen(
+            RequestBuilderDialog(ticket.branch),
+            on_request_saved
+        )
 
     # Phase 4: Todo management actions
 

@@ -56,6 +56,12 @@ class Config:
     todos_max_display: int = 10
     todos_estimate_in_hours: bool = False
 
+    # Phase 7: API Testing settings
+    api_default_timeout: int = 30
+    api_follow_redirects: bool = True
+    api_max_history_entries: int = 50
+    api_verify_ssl: bool = True
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -239,6 +245,18 @@ def load_config() -> Config:
             ),
             todos_estimate_in_hours=data.get(
                 "todos_estimate_in_hours", Config.todos_estimate_in_hours
+            ),
+            api_default_timeout=data.get(
+                "api_default_timeout", Config.api_default_timeout
+            ),
+            api_follow_redirects=data.get(
+                "api_follow_redirects", Config.api_follow_redirects
+            ),
+            api_max_history_entries=data.get(
+                "api_max_history_entries", Config.api_max_history_entries
+            ),
+            api_verify_ssl=data.get(
+                "api_verify_ssl", Config.api_verify_ssl
             ),
         )
 
