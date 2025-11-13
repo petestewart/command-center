@@ -17,3 +17,6 @@ rich>=13.0.0
 
 # Date/time utilities
 python-dateutil>=2.8.0
+
+# HTTP client library for API testing (Phase 7)
+requests>=2.31.0
