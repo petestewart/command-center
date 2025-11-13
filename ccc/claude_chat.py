@@ -1,7 +1,7 @@
 """
-Claude Chat - Integration with Claude CLI for branch communication
+Claude Chat - Integration with Claude Code CLI for branch communication
 
-This module provides communication with Claude via the Claude CLI tool,
+This module provides communication with Claude via the Claude Code CLI,
 allowing developers to discuss plans, get suggestions, and revise todos.
 """
 
@@ -25,11 +25,10 @@ class ClaudeCLINotFoundError(ClaudeCLIError):
     """Claude CLI is not installed"""
     def __init__(self):
         super().__init__(
-            "Claude CLI not found.\n\n"
+            "Claude Code CLI not found.\n\n"
             "Installation:\n"
-            "  npm install -g @anthropic-ai/claude-cli\n\n"
-            "Then authenticate:\n"
-            "  claude login"
+            "  npm install -g @anthropic-ai/claude-code\n\n"
+            "Or see: https://docs.claude.com/claude-code"
         )
 
 
@@ -37,10 +36,9 @@ class ClaudeCLINotAuthenticatedError(ClaudeCLIError):
     """Claude CLI is not authenticated"""
     def __init__(self):
         super().__init__(
-            "Claude CLI not authenticated.\n\n"
-            "Please run:\n"
-            "  claude login\n\n"
-            "This will use your Claude Pro subscription."
+            "Claude Code CLI not authenticated.\n\n"
+            "Please authenticate using the Claude Code interface.\n"
+            "This will use your Claude Pro or API subscription."
         )
 
 
@@ -87,23 +85,23 @@ class ChatMessage:
 
 class ClaudeChat:
     """
-    Manages communication with Claude via CLI.
+    Manages communication with Claude via Claude Code CLI.
 
     Handles:
-    - Verifying Claude CLI installation and authentication
+    - Verifying Claude Code CLI installation and authentication
     - Building context from branch state (todos, git status)
     - Sending messages and receiving responses
     - Persisting chat history
     """
 
-    def __init__(self, branch_name: str, cli_path: str = "claude", timeout: int = 30):
+    def __init__(self, branch_name: str, cli_path: str = "claude", timeout: int = 60):
         """
         Initialize Claude chat for a branch.
 
         Args:
             branch_name: Branch name to chat about
             cli_path: Path to claude CLI binary (default: "claude")
-            timeout: Timeout in seconds for CLI calls (default: 30)
+            timeout: Timeout in seconds for CLI calls (default: 60)
         """
         self.branch_name = branch_name
         self.cli_path = cli_path
@@ -117,7 +115,7 @@ class ClaudeChat:
 
     def verify_cli(self) -> Tuple[bool, Optional[str]]:
         """
-        Verify that Claude CLI is installed and accessible.
+        Verify that Claude Code CLI is installed and accessible.
 
         Returns:
             Tuple of (success, error_message)
@@ -143,9 +141,9 @@ class ClaudeChat:
 
         except FileNotFoundError:
             return False, (
-                "Claude CLI not found.\n\n"
-                "Install with: npm install -g @anthropic-ai/claude-cli\n"
-                "Then authenticate: claude login"
+                "Claude Code CLI not found.\n\n"
+                "Install with: npm install -g @anthropic-ai/claude-code\n"
+                "Or see: https://docs.claude.com/claude-code"
             )
         except subprocess.TimeoutExpired:
             return False, "Claude CLI check timed out (took more than 5 seconds)"
@@ -188,7 +186,7 @@ User: {user_message}"""
         # Call Claude CLI
         try:
             result = subprocess.run(
-                [self.cli_path, "chat", "--message", full_prompt],
+                [self.cli_path, "--print", full_prompt],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -200,7 +198,7 @@ User: {user_message}"""
 
                 # Check for authentication issues
                 if "not authenticated" in stderr.lower() or "login" in stderr.lower():
-                    return None, "Not authenticated. Run: claude login"
+                    return None, "Not authenticated. Please authenticate using Claude Code."
 
                 # Generic error
                 error_msg = stderr if stderr else "Unknown error from Claude CLI"
@@ -402,6 +400,6 @@ def create_chat(branch_name: str, config=None) -> ClaudeChat:
         config = load_config()
 
     cli_path = getattr(config, 'claude_cli_path', 'claude')
-    timeout = getattr(config, 'claude_timeout', 30)
+    timeout = getattr(config, 'claude_timeout', 60)
 
     return ClaudeChat(branch_name, cli_path=cli_path, timeout=timeout)

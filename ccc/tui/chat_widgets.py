@@ -14,8 +14,10 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, VerticalScroll, Horizontal, Vertical
 from textual.widgets import Static, Input, Button, Label
+from textual.screen import Screen
 from textual.binding import Binding
 from textual.reactive import reactive
+from textual.message import Message
 from rich.text import Text
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -35,9 +37,15 @@ class ChatHistory(VerticalScroll):
         self.branch_name = branch_name
         self.chat: Optional[ClaudeChat] = None
 
+    def on_mount(self):
+        """Load messages when mounted"""
+        if self.branch_name and not self.chat:
+            self.chat = create_chat(self.branch_name)
+            self.refresh_messages()
+
     def watch_branch_name(self, branch_name: str):
         """Update when branch changes"""
-        if branch_name:
+        if branch_name and self.is_mounted:
             self.chat = create_chat(branch_name)
             self.refresh_messages()
 
@@ -46,6 +54,9 @@ class ChatHistory(VerticalScroll):
         if not self.chat:
             self.update(Static("No chat loaded"))
             return
+
+        # Reload history from disk to get latest messages
+        self.chat._load_history()
 
         # Clear existing content
         self.remove_children()
@@ -62,6 +73,9 @@ class ChatHistory(VerticalScroll):
 
         # Auto-scroll to bottom
         self.scroll_end(animate=False)
+
+        # Force a refresh of the widget
+        self.refresh(layout=True)
 
 
 class ChatMessageWidget(Static):
@@ -132,11 +146,49 @@ class QuestionNotificationBanner(Static):
             )
 
 
-class ChatView(Container):
+class ChatView(Screen):
     """
     Complete chat interface view.
 
     Displays chat history and provides input for sending messages.
+    """
+
+    CSS = """
+    ChatView {
+        layout: vertical;
+    }
+
+    #chat-container {
+        layout: vertical;
+        height: 100%;
+        width: 100%;
+        border: solid $primary;
+        padding: 1;
+    }
+
+    #chat-history {
+        height: 1fr;
+        border: solid $accent;
+        padding: 1;
+    }
+
+    #chat-input-container {
+        height: auto;
+        margin-top: 1;
+    }
+
+    #chat-input {
+        width: 1fr;
+    }
+
+    #send-button {
+        width: auto;
+    }
+
+    #chat-status {
+        height: auto;
+        margin-top: 1;
+    }
     """
 
     BINDINGS = [
@@ -147,15 +199,16 @@ class ChatView(Container):
         super().__init__(*args, **kwargs)
         self.branch_name = branch_name
         self.chat = create_chat(branch_name)
-        self.border_title = f"Chat: {branch_name}"
 
     def compose(self) -> ComposeResult:
         """Build chat UI"""
-        yield ChatHistory(self.branch_name, id="chat-history")
-        with Horizontal(id="chat-input-container"):
-            yield Input(placeholder="Type your message... (Shift+Enter to send)", id="chat-input")
-            yield Button("Send", id="send-button", variant="primary")
-        yield Static("", id="chat-status")
+        with Container(id="chat-container"):
+            yield Static(f"[bold]Chat: {self.branch_name}[/bold]", id="chat-header")
+            yield ChatHistory(self.branch_name, id="chat-history")
+            with Horizontal(id="chat-input-container"):
+                yield Input(placeholder="Type your message... (Shift+Enter to send)", id="chat-input")
+                yield Button("Send", id="send-button", variant="primary")
+            yield Static("", id="chat-status")
 
     def on_mount(self):
         """Focus input on mount"""
@@ -192,6 +245,17 @@ class ChatView(Container):
         # Clear input immediately
         input_widget.value = ""
 
+        # Add user message to history immediately
+        history = self.query_one("#chat-history", ChatHistory)
+        from ccc.claude_chat import ChatMessage
+        from datetime import datetime, timezone
+        user_msg = ChatMessage(role="user", content=message, timestamp=datetime.now(timezone.utc))
+
+        # Temporarily add to display
+        if history.chat:
+            history.chat.messages.append(user_msg)
+            history.refresh_messages()
+
         # Show loading status
         status = self.query_one("#chat-status", Static)
         status.update("[cyan]🤔 Claude is thinking...[/cyan]")
@@ -204,25 +268,37 @@ class ChatView(Container):
         import threading
 
         def send():
-            response, error = self.chat.send_message(message)
-            self.call_from_thread(self._on_response, response, error)
+            try:
+                response, error = self.chat.send_message(message)
+                self.call_from_thread(self._on_response, response, error)
+            except Exception as e:
+                self.call_from_thread(self._on_response, None, f"Exception: {str(e)}")
 
         thread = threading.Thread(target=send, daemon=True)
         thread.start()
 
     def _on_response(self, response: Optional[str], error: Optional[str]):
         """Handle Claude's response"""
-        status = self.query_one("#chat-status", Static)
-        history = self.query_one("#chat-history", ChatHistory)
+        try:
+            status = self.query_one("#chat-status", Static)
+            history = self.query_one("#chat-history", ChatHistory)
 
-        if error:
-            status.update(f"[red]❌ Error: {error}[/red]")
-        else:
-            status.update("[green]✓ Response received[/green]")
-            history.refresh_messages()
-
-        # Clear status after 3 seconds
-        self.set_timer(3, lambda: status.update(""))
+            if error:
+                status.update(f"[red]❌ Error: {error}[/red]")
+                status.refresh()
+                # Keep error visible longer (10 seconds)
+                self.set_timer(10, lambda: status.update(""))
+            else:
+                status.update("[green]✓ Response received[/green]")
+                status.refresh()
+                history.refresh_messages()
+                # Force screen refresh
+                self.refresh()
+                # Clear success status after 3 seconds
+                self.set_timer(3, lambda: status.update(""))
+        except Exception as e:
+            # Log any errors in the callback
+            self.app.notify(f"Error in _on_response: {str(e)}", severity="error")
 
     def action_close(self):
         """Close the chat view"""
@@ -311,15 +387,50 @@ class QuestionWidget(Container):
             self.remove()
             self.app.notify(f"Question dismissed", severity="information")
 
-    class ReplyRequest(Static.Message):
+    class ReplyRequest(Message):
         """Message to request reply dialog"""
         def __init__(self, question_id: str):
             super().__init__()
             self.question_id = question_id
 
 
-class PlanReviewView(Container):
+class PlanReviewView(Screen):
     """View for displaying plan review suggestions from Claude"""
+
+    CSS = """
+    PlanReviewView {
+        layout: vertical;
+    }
+
+    #review-container {
+        layout: vertical;
+        height: 100%;
+        width: 100%;
+        border: solid $primary;
+        padding: 1;
+    }
+
+    #review-header {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #review-status {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #suggestions-container {
+        height: 1fr;
+        border: solid $accent;
+        padding: 1;
+    }
+
+    #review-actions {
+        height: auto;
+        margin-top: 1;
+    }
+    """
 
     BINDINGS = [
         Binding("escape", "close", "Close"),
@@ -328,15 +439,16 @@ class PlanReviewView(Container):
     def __init__(self, branch_name: str, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.branch_name = branch_name
-        self.border_title = f"Plan Review: {branch_name}"
 
     def compose(self) -> ComposeResult:
         """Build review UI"""
-        yield Static("[cyan]Requesting plan review from Claude...[/cyan]", id="review-status")
-        yield VerticalScroll(id="suggestions-container")
-        with Horizontal(id="review-actions"):
-            yield Button("Refresh", id="refresh-review", variant="default")
-            yield Button("Close", id="close-review", variant="primary")
+        with Container(id="review-container"):
+            yield Static(f"[bold]Plan Review: {self.branch_name}[/bold]", id="review-header")
+            yield Static("[cyan]Requesting plan review from Claude...[/cyan]", id="review-status")
+            yield VerticalScroll(id="suggestions-container")
+            with Horizontal(id="review-actions"):
+                yield Button("Refresh", id="refresh-review", variant="default")
+                yield Button("Close", id="close-review", variant="primary")
 
     def on_mount(self):
         """Load suggestions on mount"""
