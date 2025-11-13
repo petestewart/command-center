@@ -8,7 +8,7 @@ import yaml
 import requests
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ccc.api_request import (
     ApiRequest,
@@ -328,9 +328,9 @@ def execute_request(
                 kwargs["data"] = body
 
         # Execute request
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         response = requests.request(request.method.value, url, **kwargs)
-        elapsed = (datetime.now() - start_time).total_seconds() * 1000  # Convert to ms
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000  # Convert to ms
 
         # Build ApiResponse
         api_response = ApiResponse(

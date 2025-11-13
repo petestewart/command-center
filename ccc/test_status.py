@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, asdict, field
 
-from ccc.utils import get_ticket_dir, get_branch_dir
+from ccc.utils import get_branch_dir, print_warning, print_error, format_time_ago
 
 
 @dataclass
@@ -66,13 +66,6 @@ class TestStatus:
         else:
             data["failures"] = []
 
-        # Support old format with 'ticket_id' field for backwards compatibility
-        if "ticket_id" in data and "branch_name" not in data:
-            data["branch_name"] = data.pop("ticket_id")
-        elif "ticket_id" in data and "branch_name" in data:
-            # Both exist, remove 'ticket_id' to avoid duplicate argument
-            data.pop("ticket_id", None)
-
         return cls(**data)
 
 
@@ -103,8 +96,6 @@ def read_test_status(branch_name: str) -> Optional[TestStatus]:
         return TestStatus.from_dict(data)
 
     except Exception as e:
-        from ccc.utils import print_warning
-
         print_warning(f"Error reading test status for {branch_name}: {e}")
         return None
 
@@ -135,8 +126,6 @@ def write_test_status(status: TestStatus) -> bool:
         return True
 
     except Exception as e:
-        from ccc.utils import print_error
-
         print_error(f"Error writing test status: {e}")
         return False
 
@@ -320,8 +309,6 @@ def format_test_status(status: TestStatus) -> str:
     Returns:
         Formatted string
     """
-    from ccc.utils import format_time_ago
-
     lines = []
 
     # Status indicator

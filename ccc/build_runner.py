@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from ccc.config import Config, load_config
@@ -60,7 +60,7 @@ class CommandRunner:
         Returns:
             Tuple of (return_code, list of output lines)
         """
-        self.start_time = datetime.now()
+        self.start_time = datetime.now(timezone.utc)
         self._is_running = True
 
         try:
@@ -108,7 +108,7 @@ class CommandRunner:
             self.returncode = 1
 
         finally:
-            self.end_time = datetime.now()
+            self.end_time = datetime.now(timezone.utc)
             self._is_running = False
 
         return self.returncode, self.output_lines
@@ -189,7 +189,7 @@ def run_build(
         status = BuildStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_build=datetime.now(),
+            last_build=datetime.now(timezone.utc),
             duration_seconds=int(duration) if duration else 0,
             errors=[line for line in output if "error" in line.lower()][:10],  # Keep first 10 errors
             warnings=len([line for line in output if "warning" in line.lower()]),
@@ -268,7 +268,7 @@ def run_tests(
         status = TestStatus(
             branch_name=branch_name,
             status="passing" if success else "failing",
-            last_run=datetime.now(),
+            last_run=datetime.now(timezone.utc),
             duration_seconds=int(duration) if duration else 0,
             total=passed + failed + skipped,
             passed=passed,
