@@ -97,45 +97,77 @@ conversations:
     message: "Can you update the todo list to use Zod?"
 ```
 
-### Claude API Integration
+### Claude CLI Integration
+
+**Note:** This phase uses the `claude` CLI tool to communicate with Claude via your Claude Pro subscription. No API key required.
 
 ```python
-import anthropic
+import subprocess
+import json
 
 class ClaudeChat:
     def __init__(self, branch: str):
         self.branch = branch
-        self.client = anthropic.Anthropic()
         self.history = self.load_history()
+        self._verify_claude_cli()
+    
+    def _verify_claude_cli(self):
+        """Verify claude CLI is installed and authenticated"""
+        try:
+            result = subprocess.run(
+                ["claude", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode != 0:
+                raise RuntimeError("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-cli")
+        except FileNotFoundError:
+            raise RuntimeError("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-cli")
     
     def send_message(self, message: str) -> str:
-        """Send message to Claude and get response"""
+        """Send message to Claude and get response via CLI"""
         # Build context about the branch
         context = self.build_context()
         
-        # Add message to history
-        self.history.append({
-            "role": "user",
-            "content": message
-        })
+        # Combine context and message
+        full_prompt = f"""{context}
+
+User question: {message}"""
         
-        # Get response from Claude
-        response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            system=context,
-            messages=self.history
-        )
-        
-        # Save response to history
-        assistant_message = response.content[0].text
-        self.history.append({
-            "role": "assistant",
-            "content": assistant_message
-        })
-        
-        self.save_history()
-        return assistant_message
+        # Call claude CLI
+        try:
+            result = subprocess.run(
+                ["claude", "chat", "--message", full_prompt],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"Claude CLI error: {result.stderr}")
+            
+            assistant_message = result.stdout.strip()
+            
+            # Save to history
+            self.history.append({
+                "role": "user",
+                "content": message,
+                "timestamp": datetime.now().isoformat()
+            })
+            self.history.append({
+                "role": "assistant",
+                "content": assistant_message,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            self.save_history()
+            return assistant_message
+            
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Claude CLI request timed out")
+        except Exception as e:
+            raise RuntimeError(f"Failed to communicate with Claude: {str(e)}")
     
     def build_context(self) -> str:
         """Build context about current branch state"""
@@ -188,12 +220,12 @@ class QuestionManager:
         self.save_question(branch, question)
 ```
 
-### Plan Revision with AI
+### Plan Revision with Claude CLI
 
 ```python
 class PlanReviser:
     def suggest_revisions(self, branch: str, context: str) -> List[str]:
-        """Ask Claude to suggest plan improvements"""
+        """Ask Claude to suggest plan improvements via CLI"""
         todos = load_todos(branch)
         
         prompt = f"""Given this development plan:
@@ -206,15 +238,28 @@ Suggest improvements or revisions to the plan. Consider:
 - Are tasks in the right order?
 - Are any tasks missing?
 - Should any tasks be split or combined?
-- Are there any blockers to address?"""
+- Are there any blockers to address?
+
+Provide your suggestions as a numbered list."""
         
-        response = self.claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        return self.parse_suggestions(response.content[0].text)
+        try:
+            result = subprocess.run(
+                ["claude", "chat", "--message", prompt],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"Claude CLI error: {result.stderr}")
+            
+            response = result.stdout.strip()
+            return self.parse_suggestions(response)
+            
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Claude CLI request timed out")
+        except Exception as e:
+            raise RuntimeError(f"Failed to get plan suggestions: {str(e)}")
 ```
 
 ## TUI Integration
@@ -321,14 +366,13 @@ class QuestionNotification(Static):
 
 ## Configuration
 
-### Claude API Settings
+### Claude CLI Settings
 
 Add to `~/.cc-control/config.yaml`:
 ```yaml
 claude:
-  api_key: ${ANTHROPIC_API_KEY}  # Read from environment
-  model: claude-sonnet-4-20250514
-  max_tokens: 1000
+  cli_path: claude  # Path to claude CLI binary (or just 'claude' if in PATH)
+  timeout: 30  # Timeout in seconds for Claude responses
   
 chat:
   history_limit: 50  # Max messages to keep
@@ -341,8 +385,11 @@ questions:
 
 ## Dependencies
 
-New dependencies required:
-- `anthropic` - Official Anthropic Python SDK
+**Required:**
+- Claude CLI tool - Install with: `npm install -g @anthropic-ai/claude-cli`
+- Must be authenticated with your Claude Pro account: `claude login`
+
+**No API key needed** - Uses your Claude Pro subscription via the CLI tool.
 
 ## Known Limitations
 
@@ -367,12 +414,14 @@ Required documentation:
 1. **CHAT_INTERFACE.md** - Using the chat feature
 2. **AGENT_QUESTIONS.md** - Handling agent questions
 3. **PLAN_REVISION.md** - Revising plans with AI
-4. **ANTHROPIC_API.md** - Setting up API access
+4. **CLAUDE_CLI_SETUP.md** - Installing and authenticating Claude CLI
 
 ## Migration Notes
 
 For users upgrading from Phase 5:
-- Requires Anthropic API key (set ANTHROPIC_API_KEY)
+- Requires Claude CLI tool (install: `npm install -g @anthropic-ai/claude-cli`)
+- Must authenticate CLI: `claude login` (uses your Claude Pro account)
+- No API key needed
 - New chat history files created per branch
 - No breaking changes to existing features
 - Chat feature is optional
