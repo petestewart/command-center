@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 from ccc.utils import (
     get_ccc_home,
-    get_ticket_dir,
+    get_branch_dir,
     validate_ticket_id,
     format_time_ago,
     expand_path,
@@ -34,8 +34,8 @@ class TestPaths:
         mock_mkdir.assert_called_once_with(exist_ok=True)
 
     @patch("ccc.utils.get_ccc_home")
-    def test_get_ticket_dir(self, mock_get_home):
-        """Test getting ticket directory."""
+    def test_get_branch_dir(self, mock_get_home):
+        """Test getting branch directory."""
         mock_home_path = MagicMock()
         mock_home_path.__truediv__ = lambda self, x: Path(
             f"/home/user/.ccc-control/{x}"
@@ -43,7 +43,7 @@ class TestPaths:
         mock_get_home.return_value = mock_home_path
 
         with patch.object(Path, "mkdir"):
-            ticket_dir = get_ticket_dir("TEST-001")
+            branch_dir = get_branch_dir("TEST-001")
 
         # Just verify it was called correctly
         mock_get_home.assert_called_once()
