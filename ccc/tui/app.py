@@ -439,10 +439,11 @@ class CommandCenterTUI(App):
         # Phase 3 Week 2: Tests & Files
         Binding("t", "test", "Test"),
         Binding("f", "files", "Files"),
-        # Phase 6: Chat & Questions
-        Binding("i", "interactive_chat", "Chat"),
+        # Phase 6: Questions & Sessions
         Binding("R", "reply_question", "Reply"),
-        Binding("v", "plan_review", "Plan Review"),
+        Binding("s", "start_session", "Start Session"),
+        Binding("S", "resume_session", "Resume Session"),
+        Binding("v", "view_session", "View Session"),
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
     ]
@@ -1075,31 +1076,7 @@ class CommandCenterTUI(App):
         # In a full implementation, you'd show a dialog to get the new position
         self.notify("Move todo: Use CLI 'ccc todo move' for now", severity="information")
 
-    # Phase 6: Chat and Question actions
-
-    def action_interactive_chat(self):
-        """Open interactive chat with Claude"""
-        ticket = self._get_selected_ticket()
-        if not ticket:
-            self.notify("No ticket selected", severity="warning")
-            return
-
-        # Verify CLI is available
-        from ccc.claude_chat import create_chat
-
-        chat = create_chat(ticket.branch)
-        is_available, error = chat.verify_cli()
-
-        if not is_available:
-            from ccc.tui.dialogs import ErrorDialog
-            self.push_screen(
-                ErrorDialog("Claude CLI Not Available", error)
-            )
-            return
-
-        # Open chat view
-        from ccc.tui.chat_widgets import ChatView
-        self.push_screen(ChatView(ticket.branch))
+    # Phase 6: Question actions
 
     def action_reply_question(self):
         """Reply to the first unanswered question"""
@@ -1136,29 +1113,131 @@ class CommandCenterTUI(App):
             on_reply_complete
         )
 
-    def action_plan_review(self):
-        """Show plan review from Claude"""
+    # Session Management Actions
+
+    def action_start_session(self):
+        """Start a Claude session for the selected TODO item"""
         ticket = self._get_selected_ticket()
         if not ticket:
             self.notify("No ticket selected", severity="warning")
             return
 
-        # Verify CLI is available
-        from ccc.claude_chat import create_chat
-
-        chat = create_chat(ticket.branch)
-        is_available, error = chat.verify_cli()
-
-        if not is_available:
-            from ccc.tui.dialogs import ErrorDialog
-            self.push_screen(
-                ErrorDialog("Claude CLI Not Available", error)
-            )
+        # Get selected TODO from the table
+        table = self.query_one(DataTable)
+        row_key = table.cursor_row
+        if row_key is None or row_key >= len(table.rows):
+            self.notify("No TODO selected. Select a row in the Tasks view first.", severity="warning")
             return
 
-        # Open plan review view
-        from ccc.tui.chat_widgets import PlanReviewView
-        self.push_screen(PlanReviewView(ticket.branch))
+        # Get TODO ID from the row
+        row = table.get_row(table.cursor_row)
+        try:
+            todo_id = int(row[0])  # First column is ID
+        except (ValueError, IndexError):
+            self.notify("Could not determine TODO ID", severity="error")
+            return
+
+        # Load TODO to check status
+        from ccc.todo import list_todos
+        todo_list = list_todos(ticket.branch)
+        todo_item = todo_list.get_item(todo_id)
+
+        if not todo_item:
+            self.notify(f"TODO #{todo_id} not found", severity="error")
+            return
+
+        if todo_item.assigned_agent:
+            self.notify(f"TODO #{todo_id} already assigned to {todo_item.assigned_agent}", severity="warning")
+            return
+
+        # Start session
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            session_id, error = manager.start_session_for_todo(todo_id)
+
+            if error:
+                self.notify(f"Failed to start session: {error}", severity="error")
+            else:
+                self.notify(f"Started Claude session {session_id[:8]} for TODO #{todo_id}", severity="success")
+                self.action_refresh()  # Refresh to show updated assignment
+        except Exception as e:
+            self.notify(f"Error starting session: {str(e)}", severity="error")
+
+    def action_resume_session(self):
+        """Resume a Claude session"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Get active sessions
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            sessions = manager.list_active_sessions()
+
+            if not sessions:
+                self.notify("No active sessions to resume", severity="information")
+                return
+
+            # For now, resume the most recent session
+            # In the future, could show a dialog to select which session
+            session = sessions[-1]
+            success, error = manager.resume_session(session.session_id)
+
+            if error:
+                self.notify(f"Failed to resume session: {error}", severity="error")
+            else:
+                self.notify(f"Resumed session {session.session_id[:8]}", severity="success")
+        except Exception as e:
+            self.notify(f"Error resuming session: {str(e)}", severity="error")
+
+    def action_view_session(self):
+        """Switch to the tmux window for the active session"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Get selected TODO from the table
+        table = self.query_one(DataTable)
+        row_key = table.cursor_row
+        if row_key is None or row_key >= len(table.rows):
+            self.notify("No TODO selected. Select a row in the Tasks view first.", severity="warning")
+            return
+
+        # Get TODO ID from the row
+        row = table.get_row(table.cursor_row)
+        try:
+            todo_id = int(row[0])
+        except (ValueError, IndexError):
+            self.notify("Could not determine TODO ID", severity="error")
+            return
+
+        # Get session for this TODO
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            session = manager.get_session_for_todo(todo_id)
+
+            if not session:
+                self.notify(f"No active session found for TODO #{todo_id}", severity="warning")
+                return
+
+            # Switch to the tmux window
+            from ccc.session import TmuxSessionManager
+            tmux_manager = TmuxSessionManager()
+
+            # Exit TUI and attach to tmux window
+            self.exit()
+            tmux_manager.attach_to_window(ticket.tmux_session, f"{session.tmux_window}")
+
+        except Exception as e:
+            self.notify(f"Error viewing session: {str(e)}", severity="error")
 
 
 def run_tui():
