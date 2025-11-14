@@ -267,6 +267,9 @@ class TicketDetailView(VerticalScroll):
         """Create child widgets."""
         with Container(id="detail-container"):
             yield Static("No ticket selected", id="ticket-header")
+            # Phase 6: Question notification banner
+            from ccc.tui.chat_widgets import QuestionNotificationBanner
+            yield QuestionNotificationBanner("", id="question-banner")
             yield AgentStatusPanel(id="agent-panel", classes="status-panel")
             yield GitStatusPanel(id="git-panel", classes="status-panel")
             yield BuildStatusPanel(id="build-panel", classes="status-panel")
@@ -301,6 +304,11 @@ class TicketDetailView(VerticalScroll):
         header.update(f"[bold]{display_id}{self.ticket.branch}[/bold]\n"
                      f"Title: {self.ticket.title}\n"
                      f"Worktree: {self.ticket.worktree_path}")
+
+        # Phase 6: Update question notification banner
+        from ccc.tui.chat_widgets import QuestionNotificationBanner
+        question_banner = self.query_one("#question-banner", QuestionNotificationBanner)
+        question_banner.branch_name = self.ticket.branch
 
         # Update all status panels - use branch (which is the primary ID)
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -338,6 +346,11 @@ class TicketDetailView(VerticalScroll):
 
         # Update status panels without forcing focus
         from ccc.tui.widgets import TodoListWidget
+        from ccc.tui.chat_widgets import QuestionNotificationBanner
+
+        # Phase 6: Refresh question notification banner
+        question_banner = self.query_one("#question-banner", QuestionNotificationBanner)
+        question_banner.update_count()
 
         # Update all status panels
         agent_panel = self.query_one("#agent-panel", AgentStatusPanel)
@@ -426,6 +439,11 @@ class CommandCenterTUI(App):
         # Phase 3 Week 2: Tests & Files
         Binding("t", "test", "Test"),
         Binding("f", "files", "Files"),
+        # Phase 6: Questions & Sessions
+        Binding("R", "reply_question", "Reply"),
+        Binding("s", "start_session", "Start Session"),
+        Binding("S", "resume_session", "Resume Session"),
+        Binding("v", "view_session", "View Session"),
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
     ]
@@ -1057,6 +1075,220 @@ class CommandCenterTUI(App):
         # For now, just show a notification that move is not yet implemented
         # In a full implementation, you'd show a dialog to get the new position
         self.notify("Move todo: Use CLI 'ccc todo move' for now", severity="information")
+
+    # Phase 6: Question actions
+
+    def action_reply_question(self):
+        """Reply to the first unanswered question"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        from ccc.questions import QuestionManager
+
+        manager = QuestionManager(ticket.branch)
+        unanswered = manager.get_unanswered()
+
+        if not unanswered:
+            self.notify("No unanswered questions", severity="information")
+            return
+
+        # Show first unanswered question
+        question = unanswered[0]
+
+        from ccc.tui.chat_dialogs import ReplyToQuestionDialog
+
+        def on_reply_complete(result):
+            if result and result.get("success"):
+                self.notify(
+                    f"Answered question from {question.agent_id}",
+                    severity="information"
+                )
+                # Refresh to update question notification
+                self.action_refresh()
+
+        self.push_screen(
+            ReplyToQuestionDialog(ticket.branch, question),
+            on_reply_complete
+        )
+
+    # Session Management Actions
+
+    def action_start_session(self):
+        """Start a Claude session for the selected TODO item"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Get the TodoListWidget from the detail view
+        try:
+            from ccc.tui.widgets import TodoListWidget
+            todo_widget = self.query_one("#todo-panel", TodoListWidget)
+        except Exception as e:
+            self.notify(f"Could not find TODO panel: {str(e)}", severity="error")
+            return
+
+        # Get selected TODO from the widget
+        if not todo_widget.todos:
+            self.notify("No TODOs available. Create one first.", severity="information")
+            return
+
+        focused_idx = todo_widget._focused_index
+        if focused_idx < 0 or focused_idx >= len(todo_widget.todos):
+            self.notify("No TODO selected", severity="warning")
+            return
+
+        todo_item = todo_widget.todos[focused_idx]
+
+        if todo_item.assigned_agent:
+            self.notify(f"TODO already assigned to {todo_item.assigned_agent}", severity="warning")
+            return
+
+        # Start session
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            session_id, error = manager.start_session_for_todo(todo_item.id)
+
+            if error:
+                self.notify(f"Failed to start session: {error}", severity="error")
+            else:
+                self.notify(f"Started Claude session {session_id[:8]} for TODO #{todo_item.id}", severity="success")
+                todo_widget.refresh_content()  # Refresh to show updated assignment
+        except Exception as e:
+            self.notify(f"Error starting session: {str(e)}", severity="error")
+
+    def action_resume_session(self):
+        """Resume a Claude session"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Get active sessions
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            sessions = manager.list_active_sessions()
+
+            if not sessions:
+                self.notify("No active sessions to resume", severity="information")
+                return
+
+            # For now, resume the most recent session
+            # In the future, could show a dialog to select which session
+            session = sessions[-1]
+            success, error = manager.resume_session(session.session_id)
+
+            if error:
+                self.notify(f"Failed to resume session: {error}", severity="error")
+            else:
+                self.notify(f"Resumed session {session.session_id[:8]}", severity="success")
+        except Exception as e:
+            self.notify(f"Error resuming session: {str(e)}", severity="error")
+
+    def action_view_session(self):
+        """Switch to the tmux window for the active session"""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Get the TodoListWidget from the detail view
+        try:
+            from ccc.tui.widgets import TodoListWidget
+            todo_widget = self.query_one("#todo-panel", TodoListWidget)
+        except Exception as e:
+            self.notify(f"Could not find TODO panel: {str(e)}", severity="error")
+            return
+
+        # Get selected TODO from the widget
+        if not todo_widget.todos:
+            self.notify("No TODOs available", severity="information")
+            return
+
+        focused_idx = todo_widget._focused_index
+        if focused_idx < 0 or focused_idx >= len(todo_widget.todos):
+            self.notify("No TODO selected", severity="warning")
+            return
+
+        todo_item = todo_widget.todos[focused_idx]
+
+        # Get session for this TODO
+        from ccc.claude_session import ClaudeSessionManager
+
+        try:
+            manager = ClaudeSessionManager(ticket.branch)
+            session = manager.get_session_for_todo(todo_item.id)
+
+            if not session:
+                self.notify(f"No active session found for TODO #{todo_item.id}", severity="warning")
+                return
+
+            # Open Claude session in a new terminal window (keeps TUI open)
+            import os
+            import subprocess
+
+            # Build the command to create a grouped session and attach to specific window
+            # Multiple clients attached to the same session all see the same window
+            # Solution: Create a new grouped session (-t) that shares windows but has independent view
+            import random
+            import string
+            # Generate a random session suffix to avoid conflicts
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            grouped_session = f"{ticket.tmux_session}-view-{suffix}"
+
+            # Command: create grouped session, then select the specific window
+            # Note: Use regular semicolons for AppleScript, not \; (those are for direct shell execution)
+            # Quote the window name to handle special characters like #
+            import shlex
+            quoted_window = shlex.quote(session.tmux_window_name)
+            tmux_cmd = f"tmux new-session -d -t {ticket.tmux_session} -s {grouped_session} && tmux select-window -t {grouped_session}:={quoted_window} && tmux attach-session -t {grouped_session}"
+
+            # Detect terminal and open new window
+            # Check if iTerm2 is running
+            try:
+                result = subprocess.run(
+                    ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1
+                )
+                processes = result.stdout.lower()
+
+                if "iterm2" in processes or "iterm" in processes:
+                    # Use iTerm2 to open new window
+                    applescript = f'''
+                        tell application "iTerm"
+                            create window with default profile
+                            tell current session of current window
+                                write text "{tmux_cmd}"
+                            end tell
+                        end tell
+                    '''
+                    subprocess.Popen(["osascript", "-e", applescript])
+                    self.notify(f"Opened Claude session in new iTerm2 window", severity="success")
+                else:
+                    # Use Terminal.app
+                    applescript = f'''
+                        tell application "Terminal"
+                            do script "{tmux_cmd}"
+                            activate
+                        end tell
+                    '''
+                    subprocess.Popen(["osascript", "-e", applescript])
+                    self.notify(f"Opened Claude session in new Terminal window", severity="success")
+
+            except Exception as e:
+                # Fallback: just show the user the command
+                self.notify(f"Run this in a new terminal: {tmux_cmd}", severity="information", timeout=10)
+
+        except Exception as e:
+            self.notify(f"Error viewing session: {str(e)}", severity="error")
 
 
 def run_tui():
