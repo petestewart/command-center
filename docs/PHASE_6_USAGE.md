@@ -1,20 +1,20 @@
 # Phase 6: Replanning & Communication - Usage Guide
 
-Phase 6 adds AI-powered communication features using Claude CLI, enabling developers to chat about decisions, get plan reviews, and handle agent questions.
+Phase 6 adds AI-powered communication features using Claude Code, enabling developers to chat about decisions, launch Claude sessions for TODOs, get plan reviews, and handle agent questions.
 
 ## Prerequisites
 
-Before using Phase 6 features, you need to install and authenticate the Claude CLI:
+Before using Phase 6 features, you need to install and authenticate Claude Code:
 
 ```bash
-# Install Claude CLI
-npm install -g @anthropic-ai/claude-cli
+# Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
 
 # Authenticate (uses your Claude Pro subscription)
 claude login
 ```
 
-**No API key needed!** The Claude CLI uses your Claude Pro subscription.
+**No API key needed!** Claude Code uses your Claude Pro subscription.
 
 ## Features
 
@@ -40,13 +40,7 @@ ccc chat clear feature/IN-413
 
 #### TUI Usage
 
-Press **`i`** (interactive) from the branch detail view to open the chat interface.
-
-Features:
-- See full conversation history
-- Type messages in real-time
-- Get responses with full branch context
-- Auto-scroll to latest messages
+Chat is currently CLI-only. Use the `ccc chat send` command to communicate with Claude about your branch.
 
 ### 2. Agent Questions
 
@@ -95,7 +89,40 @@ if question.answered:
     print(f"Answer: {question.answer}")
 ```
 
-### 3. Plan Review & Suggestions
+### 3. Claude Sessions for TODOs
+
+Launch dedicated Claude Code sessions attached to individual TODO items for focused AI assistance.
+
+#### Programmatic Usage
+
+```python
+from ccc.claude_session import ClaudeSessionManager
+
+# Start a session for a TODO item
+manager = ClaudeSessionManager("feature/IN-413")
+session_id, error = manager.start_session_for_todo(
+    todo_id=5,
+    custom_prompt="Implement the user authentication logic"
+)
+
+# Resume an existing session
+success, error = manager.resume_session(session_id)
+
+# Monitor session activity
+status, error = manager.monitor_session(session_id)
+```
+
+#### TUI Usage
+
+From the branch detail view:
+
+- Press **`s`** to start a Claude session for the selected TODO
+- Press **`S`** to resume an existing session
+- Press **`v`** to view/switch to the active session window
+
+Sessions run in tmux windows named `claude-#<todo_id>` and maintain conversation continuity.
+
+### 4. Plan Review & Suggestions
 
 Get AI-powered suggestions for improving your todo list and development plan.
 
@@ -114,12 +141,7 @@ ccc plan next feature/IN-413
 
 #### TUI Usage
 
-Press **`v`** (view) from the branch detail view to open the plan review interface.
-
-Features:
-- See all suggestions in a scrollable list
-- Refresh suggestions with latest context
-- Suggestions consider current todos, git status, and build/test status
+Plan review is currently CLI-only. Use the `ccc plan review` and `ccc plan next` commands.
 
 #### Example Output
 
@@ -147,12 +169,12 @@ Add Claude CLI settings to `~/.ccc-control/config.yaml`:
 
 ```yaml
 # Phase 6: Claude CLI & Communication
-claude_cli_path: claude  # Path to CLI (or 'claude' if in PATH)
-claude_timeout: 30  # Timeout in seconds
-chat_history_limit: 50  # Max messages to keep
-chat_context_window: 10  # Recent messages in context
-questions_notification_style: banner  # or "toast", "silent"
-questions_auto_dismiss: 3600  # Auto-dismiss after N seconds
+claude_cli_path: claude # Path to CLI (or 'claude' if in PATH)
+claude_timeout: 30 # Timeout in seconds
+chat_history_limit: 50 # Max messages to keep
+chat_context_window: 10 # Recent messages in context
+questions_notification_style: banner # or "toast", "silent"
+questions_auto_dismiss: 3600 # Auto-dismiss after N seconds
 ```
 
 ## Context Awareness
@@ -169,11 +191,12 @@ This means Claude's suggestions are tailored to your specific situation!
 
 ## TUI Keyboard Shortcuts
 
-| Key | Action | Description |
-|-----|--------|-------------|
-| **i** | Interactive Chat | Open chat interface for the selected branch |
+| Key   | Action            | Description                              |
+| ----- | ----------------- | ---------------------------------------- |
 | **R** | Reply to Question | Reply to first unanswered agent question |
-| **v** | Plan Review | Get AI suggestions for improving the plan |
+| **s** | Start Session     | Start Claude session for selected TODO   |
+| **S** | Resume Session    | Resume existing Claude session           |
+| **v** | View Session      | Switch to active Claude session window   |
 
 ## Common Workflows
 
@@ -205,7 +228,25 @@ ccc question reply feature/api <id> "Use Redis for persistence support"
 # Or use TUI: Press 'R' to reply
 ```
 
-### 3. Plan Optimization
+### 3. Using Claude Sessions
+
+**For focused AI assistance on specific tasks:**
+
+```bash
+# Start a Claude session for a specific TODO
+# (Programmatic - from within agents/applications)
+from ccc.claude_session import ClaudeSessionManager
+manager = ClaudeSessionManager("feature/api")
+session_id, error = manager.start_session_for_todo(5)
+
+# Session opens in tmux window: claude-#5
+# Claude gets context about TODO #5 and can work on it
+
+# Resume the session later
+manager.resume_session(session_id)
+```
+
+### 4. Plan Optimization
 
 ```bash
 # Get initial plan review
@@ -226,10 +267,11 @@ Phase 6 data is stored per branch:
 ```
 ~/.ccc-control/
 └── <branch-name>/
-    ├── chat-history.yaml    # Conversation messages
-    ├── questions.yaml       # Agent questions and answers
-    ├── todos.yaml          # Existing todo list
-    └── status.yaml         # Existing status info
+    ├── chat-history.yaml      # Chat conversation messages
+    ├── questions.yaml         # Agent questions and answers
+    ├── claude-sessions.yaml   # Claude session metadata
+    ├── todos.yaml            # Existing todo list
+    └── status.yaml           # Existing status info
 ```
 
 ## Troubleshooting
@@ -237,7 +279,7 @@ Phase 6 data is stored per branch:
 ### "Claude CLI not found"
 
 ```bash
-npm install -g @anthropic-ai/claude-cli
+npm install -g @anthropic-ai/claude-code
 ```
 
 ### "Claude CLI not authenticated"
@@ -246,14 +288,14 @@ npm install -g @anthropic-ai/claude-cli
 claude login
 ```
 
-This will open a browser window to authenticate with your Claude Pro account.
+This will authenticate with your Claude Code installation (uses your Claude Pro subscription).
 
 ### "Request timed out"
 
 Increase timeout in config:
 
 ```yaml
-claude_timeout: 60  # Increase to 60 seconds
+claude_timeout: 60 # Increase to 60 seconds
 ```
 
 ### "Empty response from Claude"
@@ -280,8 +322,9 @@ python examples/phase6_demo.py
 
 ## What's Next?
 
-Phase 6 enables bidirectional communication and dynamic planning. Future enhancements could include:
+Phase 6 enables AI-assisted development through chat, focused Claude sessions, agent questions, and plan revision. Future enhancements could include:
 
+- Rich TUI chat interface
 - Voice input via Whisper
 - Multi-branch strategic planning
 - Team collaboration features
