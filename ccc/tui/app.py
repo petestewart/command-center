@@ -1122,32 +1122,28 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        # Get selected TODO from the table
-        table = self.query_one(DataTable)
-        row_key = table.cursor_row
-        if row_key is None or row_key >= len(table.rows):
-            self.notify("No TODO selected. Select a row in the Tasks view first.", severity="warning")
-            return
-
-        # Get TODO ID from the row
-        row = table.get_row(table.cursor_row)
+        # Get the TodoListWidget from the detail view
         try:
-            todo_id = int(row[0])  # First column is ID
-        except (ValueError, IndexError):
-            self.notify("Could not determine TODO ID", severity="error")
+            from ccc.tui.widgets import TodoListWidget
+            todo_widget = self.query_one("#todo-panel", TodoListWidget)
+        except Exception as e:
+            self.notify(f"Could not find TODO panel: {str(e)}", severity="error")
             return
 
-        # Load TODO to check status
-        from ccc.todo import list_todos
-        todo_list = list_todos(ticket.branch)
-        todo_item = todo_list.get_item(todo_id)
-
-        if not todo_item:
-            self.notify(f"TODO #{todo_id} not found", severity="error")
+        # Get selected TODO from the widget
+        if not todo_widget.todos:
+            self.notify("No TODOs available. Create one first.", severity="information")
             return
+
+        focused_idx = todo_widget._focused_index
+        if focused_idx < 0 or focused_idx >= len(todo_widget.todos):
+            self.notify("No TODO selected", severity="warning")
+            return
+
+        todo_item = todo_widget.todos[focused_idx]
 
         if todo_item.assigned_agent:
-            self.notify(f"TODO #{todo_id} already assigned to {todo_item.assigned_agent}", severity="warning")
+            self.notify(f"TODO already assigned to {todo_item.assigned_agent}", severity="warning")
             return
 
         # Start session
@@ -1155,13 +1151,13 @@ class CommandCenterTUI(App):
 
         try:
             manager = ClaudeSessionManager(ticket.branch)
-            session_id, error = manager.start_session_for_todo(todo_id)
+            session_id, error = manager.start_session_for_todo(todo_item.id)
 
             if error:
                 self.notify(f"Failed to start session: {error}", severity="error")
             else:
-                self.notify(f"Started Claude session {session_id[:8]} for TODO #{todo_id}", severity="success")
-                self.action_refresh()  # Refresh to show updated assignment
+                self.notify(f"Started Claude session {session_id[:8]} for TODO #{todo_item.id}", severity="success")
+                todo_widget.refresh_content()  # Refresh to show updated assignment
         except Exception as e:
             self.notify(f"Error starting session: {str(e)}", severity="error")
 
@@ -1202,39 +1198,94 @@ class CommandCenterTUI(App):
             self.notify("No ticket selected", severity="warning")
             return
 
-        # Get selected TODO from the table
-        table = self.query_one(DataTable)
-        row_key = table.cursor_row
-        if row_key is None or row_key >= len(table.rows):
-            self.notify("No TODO selected. Select a row in the Tasks view first.", severity="warning")
+        # Get the TodoListWidget from the detail view
+        try:
+            from ccc.tui.widgets import TodoListWidget
+            todo_widget = self.query_one("#todo-panel", TodoListWidget)
+        except Exception as e:
+            self.notify(f"Could not find TODO panel: {str(e)}", severity="error")
             return
 
-        # Get TODO ID from the row
-        row = table.get_row(table.cursor_row)
-        try:
-            todo_id = int(row[0])
-        except (ValueError, IndexError):
-            self.notify("Could not determine TODO ID", severity="error")
+        # Get selected TODO from the widget
+        if not todo_widget.todos:
+            self.notify("No TODOs available", severity="information")
             return
+
+        focused_idx = todo_widget._focused_index
+        if focused_idx < 0 or focused_idx >= len(todo_widget.todos):
+            self.notify("No TODO selected", severity="warning")
+            return
+
+        todo_item = todo_widget.todos[focused_idx]
 
         # Get session for this TODO
         from ccc.claude_session import ClaudeSessionManager
 
         try:
             manager = ClaudeSessionManager(ticket.branch)
-            session = manager.get_session_for_todo(todo_id)
+            session = manager.get_session_for_todo(todo_item.id)
 
             if not session:
-                self.notify(f"No active session found for TODO #{todo_id}", severity="warning")
+                self.notify(f"No active session found for TODO #{todo_item.id}", severity="warning")
                 return
 
-            # Switch to the tmux window
-            from ccc.session import TmuxSessionManager
-            tmux_manager = TmuxSessionManager()
+            # Open Claude session in a new terminal window (keeps TUI open)
+            import os
+            import subprocess
 
-            # Exit TUI and attach to tmux window
-            self.exit()
-            tmux_manager.attach_to_window(ticket.tmux_session, f"{session.tmux_window}")
+            # Build the command to create a grouped session and attach to specific window
+            # Multiple clients attached to the same session all see the same window
+            # Solution: Create a new grouped session (-t) that shares windows but has independent view
+            import random
+            import string
+            # Generate a random session suffix to avoid conflicts
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            grouped_session = f"{ticket.tmux_session}-view-{suffix}"
+
+            # Command: create grouped session, then select the specific window
+            # Note: Use regular semicolons for AppleScript, not \; (those are for direct shell execution)
+            # Quote the window name to handle special characters like #
+            import shlex
+            quoted_window = shlex.quote(session.tmux_window_name)
+            tmux_cmd = f"tmux new-session -d -t {ticket.tmux_session} -s {grouped_session} && tmux select-window -t {grouped_session}:={quoted_window} && tmux attach-session -t {grouped_session}"
+
+            # Detect terminal and open new window
+            # Check if iTerm2 is running
+            try:
+                result = subprocess.run(
+                    ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1
+                )
+                processes = result.stdout.lower()
+
+                if "iterm2" in processes or "iterm" in processes:
+                    # Use iTerm2 to open new window
+                    applescript = f'''
+                        tell application "iTerm"
+                            create window with default profile
+                            tell current session of current window
+                                write text "{tmux_cmd}"
+                            end tell
+                        end tell
+                    '''
+                    subprocess.Popen(["osascript", "-e", applescript])
+                    self.notify(f"Opened Claude session in new iTerm2 window", severity="success")
+                else:
+                    # Use Terminal.app
+                    applescript = f'''
+                        tell application "Terminal"
+                            do script "{tmux_cmd}"
+                            activate
+                        end tell
+                    '''
+                    subprocess.Popen(["osascript", "-e", applescript])
+                    self.notify(f"Opened Claude session in new Terminal window", severity="success")
+
+            except Exception as e:
+                # Fallback: just show the user the command
+                self.notify(f"Run this in a new terminal: {tmux_cmd}", severity="information", timeout=10)
 
         except Exception as e:
             self.notify(f"Error viewing session: {str(e)}", severity="error")

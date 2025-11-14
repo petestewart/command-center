@@ -7,6 +7,7 @@ Manages Claude Code sessions attached to TODO items, running in tmux windows.
 import subprocess
 import uuid
 import re
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
@@ -15,7 +16,7 @@ from dataclasses import dataclass, field, asdict
 import yaml
 import libtmux
 
-from ccc.utils import get_branch_dir, print_error, print_success, print_info
+from ccc.utils import get_branch_dir, print_error, print_success, print_info, get_tmux_session_name_from_branch
 from ccc.todo import TodoList, TodoItem, list_todos, save_todos
 
 
@@ -26,7 +27,7 @@ class ClaudeSession:
     session_id: str  # UUID for Claude session
     todo_id: int
     branch_name: str
-    tmux_window: int  # Which tmux window (0=agent by default)
+    tmux_window_name: str  # Tmux window name (e.g., "claude-#5")
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     status: str = "starting"  # "starting", "running", "paused", "completed", "error"
     initial_prompt: Optional[str] = None
@@ -64,7 +65,7 @@ class ClaudeSessionManager:
         self.branch_name = branch_name
         self.branch_dir = get_branch_dir(branch_name)
         self.sessions_file = self.branch_dir / "claude-sessions.yaml"
-        self.tmux_session_name = f"ccc-{branch_name}"
+        self.tmux_session_name = get_tmux_session_name_from_branch(branch_name)
 
         try:
             self.tmux_server = libtmux.Server()
@@ -108,7 +109,6 @@ class ClaudeSessionManager:
     def start_session_for_todo(
         self,
         todo_id: int,
-        window_index: int = 0,
         custom_prompt: Optional[str] = None
     ) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -116,7 +116,6 @@ class ClaudeSessionManager:
 
         Args:
             todo_id: ID of the TODO item
-            window_index: Tmux window index (default: 0 = agent window)
             custom_prompt: Optional custom initial prompt (auto-generated if None)
 
         Returns:
@@ -160,39 +159,30 @@ class ClaudeSessionManager:
         if not tmux_session:
             return None, f"Could not find tmux session {self.tmux_session_name}"
 
-        # Get or create window
-        windows = tmux_session.list_windows()
-        if window_index >= len(windows):
-            # Create new window for this session
-            window = tmux_session.new_window(
-                window_name=f"claude-{todo_id}",
-                start_directory=ticket.worktree_path,
-                attach=False
-            )
-            window_index = window.index
-        else:
-            window = windows[window_index]
+        # Always create a new window for each Claude session
+        # This ensures each TODO has its own isolated conversation
+        window_name = f"claude-#{todo_id}"
+        window = tmux_session.new_window(
+            window_name=window_name,
+            start_directory=ticket.worktree_path,
+            attach=False
+        )
 
-        # Send Claude command to window
+        # Send Claude command to window with initial prompt
         # Using --session-id to maintain conversation continuity
-        cmd = f"claude --session-id {session_id}"
+        # Pass the prompt as a command-line argument so it's the first message
+        cmd = f'claude --session-id {session_id} {shlex.quote(prompt)}'
 
         pane = window.list_panes()[0]
         pane.send_keys(f"cd {ticket.worktree_path}", enter=True)
         pane.send_keys(cmd, enter=True)
-
-        # Send initial prompt
-        # Wait a moment for Claude to start
-        import time
-        time.sleep(1)
-        pane.send_keys(prompt, enter=True)
 
         # Create session object
         session = ClaudeSession(
             session_id=session_id,
             todo_id=todo_id,
             branch_name=self.branch_name,
-            tmux_window=window_index,
+            tmux_window_name=window_name,
             status="running",
             initial_prompt=prompt,
             last_activity=datetime.now(timezone.utc)
@@ -207,10 +197,10 @@ class ClaudeSessionManager:
         todo_item.assigned_agent = f"Claude-{session_id[:8]}"
         if todo_item.status == "not_started":
             todo_item.status = "in_progress"
-        save_todos(self.branch_name, todo_list)
+        save_todos(todo_list)
 
         print_success(f"Started Claude session {session_id[:8]} for TODO #{todo_id}")
-        print_info(f"Window: {self.tmux_session_name}:{window_index}")
+        print_info(f"Window: {self.tmux_session_name}:{window_name}")
 
         return session_id, None
 
@@ -231,7 +221,7 @@ class ClaudeSessionManager:
             prompt_parts.append(f"Branch Title: {ticket.title}")
             prompt_parts.append("")
 
-        prompt_parts.append(f"Task #{todo_item.id}: {todo_item.description}")
+        prompt_parts.append(f"Task: {todo_item.description}")
         prompt_parts.append("")
 
         if todo_item.blocked_by:
@@ -266,12 +256,11 @@ class ClaudeSessionManager:
         if not tmux_session:
             return False, f"Could not find tmux session"
 
-        # Get window
-        windows = tmux_session.list_windows()
-        if session.tmux_window >= len(windows):
-            return False, f"Window {session.tmux_window} not found"
+        # Find window by name
+        window = tmux_session.find_where({"window_name": session.tmux_window_name})
+        if not window:
+            return False, f"Window {session.tmux_window_name} not found"
 
-        window = windows[session.tmux_window]
         pane = window.list_panes()[0]
 
         # Send resume command
@@ -311,12 +300,11 @@ class ClaudeSessionManager:
         if not tmux_session:
             return None, f"Could not find tmux session"
 
-        # Get window and capture output
-        windows = tmux_session.list_windows()
-        if session.tmux_window >= len(windows):
-            return None, f"Window not found"
+        # Find window by name and capture output
+        window = tmux_session.find_where({"window_name": session.tmux_window_name})
+        if not window:
+            return None, f"Window {session.tmux_window_name} not found"
 
-        window = windows[session.tmux_window]
         pane = window.list_panes()[0]
 
         # Capture last 100 lines
@@ -407,7 +395,7 @@ class ClaudeSessionManager:
         todo_item = todo_list.get_item(session.todo_id)
         if todo_item:
             todo_item.assigned_agent = None
-            save_todos(self.branch_name, todo_list)
+            save_todos(todo_list)
 
         print_success(f"Stopped session {session_id[:8]}")
         return True, None
