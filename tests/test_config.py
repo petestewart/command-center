@@ -34,6 +34,17 @@ class TestConfig:
         assert config.build_status_cache_seconds == 30
         assert config.test_status_cache_seconds == 30
 
+        # Phase 1: Server and database configuration defaults
+        assert config.server_command == "npm run dev"
+        assert config.server_auto_start is False
+        assert config.server_health_check_interval == 10
+        assert config.server_health_check_timeout == 2
+        assert config.server_ready_patterns is None
+        assert config.server_error_patterns is None
+        assert config.database_type == "postgresql"
+        assert config.database_connection_string is None
+        assert config.database_health_check_interval == 30
+
     def test_config_custom_values(self):
         """Test Config with custom values."""
         config = Config(
@@ -76,6 +87,50 @@ class TestConfig:
         assert data["base_worktree_path"] == "~/test"
         assert data["status_poll_interval"] == 10
         assert "tmux_session_prefix" in data
+
+    def test_get_server_command_default(self, tmp_path):
+        """Test getting default server command."""
+        config = Config(server_command="npm run dev")
+
+        # Create a simple package.json to detect project
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"name": "test-project"}')
+
+        command = config.get_server_command(tmp_path)
+
+        assert command == "npm run dev"
+
+    def test_get_server_command_project_override(self, tmp_path):
+        """Test getting server command with project override."""
+        config = Config(
+            server_command="npm run dev",
+            project_commands={
+                "test-project": {
+                    "server_command": "pnpm dev",
+                }
+            },
+        )
+
+        # Create package.json to detect project name
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"name": "test-project"}')
+
+        command = config.get_server_command(tmp_path)
+
+        assert command == "pnpm dev"
+
+    def test_get_server_command_no_project_name(self, tmp_path):
+        """Test getting server command when project name can't be detected."""
+        config = Config(
+            server_command="npm run dev",
+            project_commands={"test-project": {"server_command": "pnpm dev"}},
+        )
+
+        # No package.json, can't detect project name
+        command = config.get_server_command(tmp_path)
+
+        # Should fall back to default
+        assert command == "npm run dev"
 
 
 class TestConfigPaths:
