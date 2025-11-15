@@ -915,7 +915,7 @@ class StatusBar(Static):
     def _render_server_status(self, text, server: dict) -> None:
         """Render server status."""
         state = server.get("state", "stopped")
-        url = server.get("url", "N/A")
+        url = server.get("url") or "stopped"
         error_msg = server.get("error_message")
 
         icon = self._get_status_icon(state)
@@ -943,7 +943,7 @@ class StatusBar(Static):
         if state == "error" and error_msg:
             text.append(error_msg[:30], style=style)
         elif state == "connected":
-            conn_str = database.get("connection_string", "")
+            conn_str = database.get("connection_string") or ""
             if ":5432" in conn_str:
                 text.append(":5432", style=style)
             else:
