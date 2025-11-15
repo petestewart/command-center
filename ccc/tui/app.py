@@ -22,6 +22,8 @@ from ccc.build_status import read_build_status
 from ccc.test_status import read_test_status
 from ccc.config import load_config
 from ccc.utils import format_time_ago
+from ccc.tui.widgets import StatusBar
+from ccc.status_monitor import StatusMonitor
 
 # Phase 3: Import new components
 from ccc.tui.dialogs import (
@@ -453,6 +455,8 @@ class CommandCenterTUI(App):
         self.registry = TicketRegistry()
         self.tickets: List[Ticket] = []
         self.selected_ticket_id: Optional[str] = None
+        self.config = load_config()
+        self.status_monitor: Optional[StatusMonitor] = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -463,6 +467,9 @@ class CommandCenterTUI(App):
                 yield DataTable(id="ticket-table", cursor_type="row")
 
             yield TicketDetailView(id="detail-view")
+
+        # Phase 1: Status bar showing server, database, build, and test status
+        yield StatusBar(id="status-bar")
 
         yield Footer()
 
@@ -526,22 +533,53 @@ class CommandCenterTUI(App):
         if self.tickets and not self.selected_ticket_id:
             self.selected_ticket_id = self.tickets[0].branch
             self.update_detail_view()
+            self.update_status_bar()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection in ticket table."""
         self.selected_ticket_id = event.row_key.value
         self.update_detail_view()
+        self.update_status_bar()
 
     def update_detail_view(self):
         """Update the detail view with selected ticket."""
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.branch_name = self.selected_ticket_id
 
+    def update_status_bar(self):
+        """Update the status bar with current branch status."""
+        if not self.selected_ticket_id:
+            return
+
+        # Initialize or update status monitor for this branch
+        if not self.status_monitor or self.status_monitor.branch_name != self.selected_ticket_id:
+            self.status_monitor = StatusMonitor(
+                branch_name=self.selected_ticket_id,
+                config=self.config.to_dict(),
+                on_status_change=self._on_status_change,
+            )
+
+        # Load current status and update the status bar widget
+        status = self.status_monitor.load_status()
+        status_bar = self.query_one("#status-bar", StatusBar)
+        status_bar.status = status.to_dict()
+
+    def _on_status_change(self, status):
+        """Callback when status changes in StatusMonitor."""
+        # Update status bar widget with new status
+        try:
+            status_bar = self.query_one("#status-bar", StatusBar)
+            status_bar.status = status.to_dict()
+        except Exception:
+            # Status bar might not be mounted yet
+            pass
+
     def action_refresh(self):
         """Manually refresh all data."""
         self.load_tickets()
         detail_view = self.query_one("#detail-view", TicketDetailView)
         detail_view.refresh_status()
+        self.update_status_bar()
         self.notify("Refreshed all data")
 
     def auto_refresh(self):
