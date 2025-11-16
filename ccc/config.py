@@ -72,6 +72,9 @@ class Config:
     todos_max_display: int = 10
     todos_estimate_in_hours: bool = False
 
+    # Phase 4: Tasks Pane configuration
+    tasks_file: str = "TASKS.md"  # Path to project tasks file (relative or absolute)
+
     # Phase 6: Claude CLI & Communication settings
     claude_cli_path: str = "claude"  # Path to claude CLI binary
     claude_timeout: int = 30  # Timeout in seconds for Claude responses
@@ -311,6 +314,9 @@ def load_config() -> Config:
             ),
             todos_estimate_in_hours=data.get(
                 "todos_estimate_in_hours", Config.todos_estimate_in_hours
+            ),
+            tasks_file=data.get(
+                "tasks_file", Config.tasks_file
             ),
             claude_cli_path=data.get(
                 "claude_cli_path", Config.claude_cli_path

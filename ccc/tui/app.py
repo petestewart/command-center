@@ -24,6 +24,8 @@ from ccc.config import load_config
 from ccc.utils import format_time_ago
 from ccc.tui.widgets import StatusBar
 from ccc.status_monitor import StatusMonitor
+from ccc.tasks_manager import TasksManager
+from ccc.tui.widgets.tasks_pane import TasksPane
 
 # Phase 3: Import new components
 from ccc.tui.dialogs import (
@@ -445,6 +447,8 @@ class CommandCenterTUI(App):
         # Phase 3 Week 2: Tests & Files
         Binding("t", "test", "Test"),
         Binding("f", "files", "Files"),
+        # Phase 4: Tasks Pane (Note: Key binding will be finalized in Phase 5)
+        Binding("T", "toggle_tasks", "Toggle Tasks"),
         # Phase 6: Questions & Sessions
         Binding("R", "reply_question", "Reply"),
         Binding("s", "start_session", "Start Session"),
@@ -461,6 +465,8 @@ class CommandCenterTUI(App):
         self.selected_ticket_id: Optional[str] = None
         self.config = load_config()
         self.status_monitor: Optional[StatusMonitor] = None
+        self.tasks_manager: Optional[TasksManager] = None
+        self.tasks_pane_visible: bool = True  # Tasks pane visible by default
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -491,9 +497,15 @@ class CommandCenterTUI(App):
         # Load tickets
         self.load_tickets()
 
-        # Setup auto-refresh
+        # Phase 4: Initialize TasksManager
         config = load_config()
+        self.tasks_manager = TasksManager(tasks_file=config.tasks_file)
+
+        # Setup auto-refresh
         self.set_interval(config.status_poll_interval, self.auto_refresh)
+
+        # Phase 4: Setup tasks refresh (every 3 seconds for file change detection)
+        self.set_interval(3.0, self.refresh_tasks)
 
     def load_tickets(self):
         """Load tickets from registry."""
@@ -1331,6 +1343,29 @@ class CommandCenterTUI(App):
 
         except Exception as e:
             self.notify(f"Error viewing session: {str(e)}", severity="error")
+
+    def refresh_tasks(self):
+        """Refresh tasks from TASKS.md file (called every 3 seconds)."""
+        if not self.tasks_manager:
+            return
+
+        # Load tasks to update cache if file has changed
+        # The TasksManager internally checks modification time
+        self.tasks_manager.load_tasks()
+
+    def action_toggle_tasks(self):
+        """Toggle tasks pane visibility.
+
+        Note: Full toggle behavior will be implemented in Phase 5 (Layout Refactoring).
+        For now, this action is registered but doesn't change layout.
+        """
+        self.tasks_pane_visible = not self.tasks_pane_visible
+        # Phase 5 will implement the actual layout change
+        # For now, just notify the user
+        if self.tasks_pane_visible:
+            self.notify("Tasks pane enabled (layout toggle in Phase 5)", severity="information")
+        else:
+            self.notify("Tasks pane disabled (layout toggle in Phase 5)", severity="information")
 
 
 def run_tui():
