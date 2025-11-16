@@ -118,6 +118,9 @@ class ExternalToolLauncher:
             return False
 
         try:
+            # Get current working directory to launch lazygit in the right place
+            cwd = os.getcwd()
+
             # Get current session (assumes we're running in a tmux session)
             current_session = os.environ.get('TMUX')
             if not current_session:
@@ -138,27 +141,27 @@ class ExternalToolLauncher:
                         processes = result.stdout.lower()
 
                         if "iterm2" in processes or "iterm" in processes:
-                            # Use iTerm2
+                            # Use iTerm2 - cd to directory then run lazygit
                             applescript = f'''
                                 tell application "iTerm"
                                     create window with default profile
                                     tell current session of current window
-                                        write text "{cmd_str}"
+                                        write text "cd {cwd} && {cmd_str}"
                                     end tell
                                 end tell
                             '''
                             subprocess.Popen(["osascript", "-e", applescript])
-                            logger.info(f"Launched {git_ui_command} in new iTerm2 window")
+                            logger.info(f"Launched {git_ui_command} in new iTerm2 window at {cwd}")
                         else:
-                            # Use Terminal.app
+                            # Use Terminal.app - cd to directory then run lazygit
                             applescript = f'''
                                 tell application "Terminal"
-                                    do script "{cmd_str}"
+                                    do script "cd {cwd} && {cmd_str}"
                                     activate
                                 end tell
                             '''
                             subprocess.Popen(["osascript", "-e", applescript])
-                            logger.info(f"Launched {git_ui_command} in new Terminal window")
+                            logger.info(f"Launched {git_ui_command} in new Terminal window at {cwd}")
                         return True
                     except Exception as e:
                         logger.error(f"Failed to launch in new terminal window: {e}")
@@ -166,16 +169,17 @@ class ExternalToolLauncher:
                 else:
                     # Linux: Try to open in new terminal window
                     # Try common terminal emulators
+                    full_cmd = f"cd {cwd} && {cmd_str}"
                     terminals = [
-                        ['gnome-terminal', '--', 'bash', '-c', cmd_str],
-                        ['konsole', '-e', cmd_str],
-                        ['xterm', '-e', cmd_str],
+                        ['gnome-terminal', '--', 'bash', '-c', full_cmd],
+                        ['konsole', '-e', 'bash', '-c', full_cmd],
+                        ['xterm', '-e', 'bash', '-c', full_cmd],
                     ]
 
                     for term_cmd in terminals:
                         if shutil.which(term_cmd[0]):
                             subprocess.Popen(term_cmd)
-                            logger.info(f"Launched {git_ui_command} in new {term_cmd[0]} window")
+                            logger.info(f"Launched {git_ui_command} in new {term_cmd[0]} window at {cwd}")
                             return True
 
                     logger.error("No suitable terminal emulator found")
@@ -186,15 +190,16 @@ class ExternalToolLauncher:
             cmd_parts = [git_ui_command] + git_ui_args
             cmd_str = ' '.join(cmd_parts)
 
-            # Create new window with git UI command
+            # Create new window with git UI command in the current directory
             # The window will automatically close when the command exits
             result = subprocess.run([
                 'tmux', 'new-window',
                 '-n', 'git',  # Window name
+                '-c', cwd,     # Start in current directory
                 cmd_str
             ], check=True, capture_output=True, text=True)
 
-            logger.info(f"Launched {git_ui_command} in new tmux window")
+            logger.info(f"Launched {git_ui_command} in new tmux window at {cwd}")
             return True
 
         except subprocess.CalledProcessError as e:
