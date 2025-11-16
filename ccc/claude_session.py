@@ -193,6 +193,29 @@ class ClaudeSessionManager:
         sessions[session_id] = session
         self._save_sessions(sessions)
 
+        # Phase 3: Register with Multi-Agent Manager
+        try:
+            from ccc.multi_agent_manager import MultiAgentManager
+            from ccc.status import AgentSession
+
+            agent_manager = MultiAgentManager(self.branch_name)
+
+            # Create AgentSession for tracking
+            agent_session = AgentSession(
+                id=session_id,
+                todo_id=str(todo_id),
+                title=todo_item.description,
+                status='working',
+                terminal_ref=f"{self.tmux_session_name}:{window_name}.0",  # Tmux pane ref
+                started_at=datetime.now(timezone.utc),
+                last_active=datetime.now(timezone.utc),
+            )
+
+            agent_manager.add_session(agent_session)
+        except Exception as e:
+            # Don't fail if multi-agent tracking fails
+            print_error(f"Failed to register with multi-agent manager: {e}")
+
         # Update TODO item
         todo_item.assigned_agent = f"Claude-{session_id[:8]}"
         if todo_item.status == "not_started":

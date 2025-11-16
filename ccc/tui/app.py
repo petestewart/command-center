@@ -25,6 +25,10 @@ from ccc.utils import format_time_ago
 from ccc.tui.widgets import StatusBar
 from ccc.status_monitor import StatusMonitor
 
+# Phase 3: Multi-Agent Tracking
+from ccc.multi_agent_manager import MultiAgentManager
+from ccc.tui.widgets import AgentsPane
+
 # Phase 3: Import new components
 from ccc.tui.dialogs import (
     CommitDialog,
@@ -282,6 +286,8 @@ class TicketDetailView(VerticalScroll):
             # Phase 7: Add API request panel
             from ccc.tui.api_widgets import ApiRequestListPanel
             yield ApiRequestListPanel(branch_name="", id="api-panel", classes="status-panel")
+            # Phase 3: Add multi-agent tracking pane
+            yield AgentsPane(id="agents-pane", classes="status-panel")
 
     def watch_branch_name(self, branch_name: Optional[str]):
         """Update when branch_name changes."""
@@ -376,6 +382,14 @@ class TicketDetailView(VerticalScroll):
         from ccc.tui.api_widgets import ApiRequestListPanel
         api_panel = self.query_one("#api-panel", ApiRequestListPanel)
         api_panel.refresh_requests()
+
+        # Phase 3: Initialize agents pane
+        agents_pane = self.query_one("#agents-pane", AgentsPane)
+        if not agents_pane.agent_manager:
+            # Initialize agent manager for this ticket
+            agent_manager = MultiAgentManager(self.ticket.branch)
+            agents_pane.set_agent_manager(agent_manager)
+        agents_pane.refresh_agents()
 
 
 class CommandCenterTUI(App):
@@ -1331,6 +1345,81 @@ class CommandCenterTUI(App):
 
         except Exception as e:
             self.notify(f"Error viewing session: {str(e)}", severity="error")
+
+    # Phase 3: Multi-Agent Tracking Message Handlers
+
+    def on_agents_pane_new_agent_requested(self, event: AgentsPane.NewAgentRequested) -> None:
+        """Handle New Agent button from AgentsPane."""
+        # Reuse existing start_session action
+        self.action_start_session()
+
+    def on_agents_pane_open_agent_requested(self, event: AgentsPane.OpenAgentRequested) -> None:
+        """Handle Open button from AgentsPane - focus agent's tmux pane."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            return
+
+        try:
+            # Get the agent manager
+            agents_pane = self.query_one("#agents-pane", AgentsPane)
+            if not agents_pane.agent_manager:
+                self.notify("No agent manager available", severity="warning")
+                return
+
+            # Get the session
+            session = agents_pane.agent_manager.get_session(event.session_id)
+            if not session:
+                self.notify("Session not found", severity="warning")
+                return
+
+            # Focus the tmux pane
+            if session.terminal_ref:
+                try:
+                    import subprocess
+                    # Use tmux to select the pane
+                    subprocess.run(
+                        ["tmux", "select-pane", "-t", session.terminal_ref],
+                        check=True,
+                        capture_output=True,
+                    )
+                    self.notify(f"Focused agent: {session.title}", severity="success")
+                except subprocess.CalledProcessError:
+                    self.notify("Failed to focus tmux pane", severity="warning")
+                except FileNotFoundError:
+                    self.notify("tmux not available", severity="warning")
+            else:
+                self.notify("No terminal reference for this agent", severity="information")
+
+        except Exception as e:
+            self.notify(f"Error opening agent: {str(e)}", severity="error")
+
+    def on_agents_pane_archive_agent_requested(self, event: AgentsPane.ArchiveRequested) -> None:
+        """Handle Archive button from AgentsPane - remove agent session."""
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            return
+
+        try:
+            # Get the agent manager
+            agents_pane = self.query_one("#agents-pane", AgentsPane)
+            if not agents_pane.agent_manager:
+                self.notify("No agent manager available", severity="warning")
+                return
+
+            # Get session info before removing
+            session = agents_pane.agent_manager.get_session(event.session_id)
+            title = session.title if session else "Unknown"
+
+            # Remove the session
+            success = agents_pane.agent_manager.remove_session(event.session_id)
+            if success:
+                self.notify(f"Archived agent: {title}", severity="success")
+                # Refresh will happen automatically via the archive handler in AgentsPane
+            else:
+                self.notify("Failed to archive agent", severity="warning")
+
+        except Exception as e:
+            self.notify(f"Error archiving agent: {str(e)}", severity="error")
 
 
 def run_tui():

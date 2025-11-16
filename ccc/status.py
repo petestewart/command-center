@@ -160,3 +160,114 @@ def update_status(
         )
 
     return write_agent_status(agent_status)
+
+
+# ============================================================================
+# Phase 3: Multi-Agent Tracking Data Models
+# ============================================================================
+
+
+@dataclass
+class AgentTodo:
+    """Represents a TODO item parsed from agent output."""
+
+    text: str
+    completed: bool
+    blocked: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "text": self.text,
+            "completed": self.completed,
+            "blocked": self.blocked,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentTodo":
+        """Create from dictionary loaded from JSON."""
+        return cls(
+            text=data["text"],
+            completed=data["completed"],
+            blocked=data.get("blocked", False),
+        )
+
+
+@dataclass
+class AgentSession:
+    """
+    Represents a Claude agent session for multi-agent tracking.
+
+    This is used in Phase 3 to track multiple concurrent agents,
+    their TODO lists, progress, and terminal references.
+    """
+
+    id: str
+    todo_id: Optional[str]
+    title: str
+    status: str  # 'idle', 'working', 'waiting', 'completed', 'error'
+    current_files: List[str] = None
+    progress_percent: Optional[int] = None
+    todo_list: List[AgentTodo] = None
+    terminal_ref: Optional[str] = None  # Tmux pane ID
+    started_at: Optional[datetime] = None
+    last_active: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+    def __post_init__(self):
+        """Initialize default values for mutable fields."""
+        if self.current_files is None:
+            self.current_files = []
+        if self.todo_list is None:
+            self.todo_list = []
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        data = {
+            "id": self.id,
+            "todo_id": self.todo_id,
+            "title": self.title,
+            "status": self.status,
+            "current_files": self.current_files,
+            "progress_percent": self.progress_percent,
+            "todo_list": [todo.to_dict() for todo in self.todo_list],
+            "terminal_ref": self.terminal_ref,
+            "error_message": self.error_message,
+        }
+
+        if self.started_at:
+            data["started_at"] = self.started_at.isoformat()
+        if self.last_active:
+            data["last_active"] = self.last_active.isoformat()
+
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentSession":
+        """Create from dictionary loaded from JSON."""
+        # Parse datetime fields
+        started_at = data.get("started_at")
+        if isinstance(started_at, str):
+            started_at = datetime.fromisoformat(started_at)
+
+        last_active = data.get("last_active")
+        if isinstance(last_active, str):
+            last_active = datetime.fromisoformat(last_active)
+
+        # Parse TODO list
+        todo_list_data = data.get("todo_list", [])
+        todo_list = [AgentTodo.from_dict(todo) for todo in todo_list_data]
+
+        return cls(
+            id=data["id"],
+            todo_id=data.get("todo_id"),
+            title=data["title"],
+            status=data["status"],
+            current_files=data.get("current_files", []),
+            progress_percent=data.get("progress_percent"),
+            todo_list=todo_list,
+            terminal_ref=data.get("terminal_ref"),
+            started_at=started_at,
+            last_active=last_active,
+            error_message=data.get("error_message"),
+        )
