@@ -383,7 +383,11 @@ class CommandCenterTUI(App):
 
     CSS = """
     Screen {
-        layout: horizontal;
+        layout: vertical;
+    }
+
+    Horizontal {
+        height: 1fr;
     }
 
     #ticket-list-container {
