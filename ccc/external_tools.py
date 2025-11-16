@@ -205,20 +205,126 @@ class ExternalToolLauncher:
                                     logger.info(f"Activated terminal with existing {git_ui_command}")
                                     return True
                                 else:
-                                    # Wrong directory or couldn't determine - kill and recreate
-                                    logger.info(f"Lazygit running in wrong directory ({lazygit_cwd} != {cwd}), killing and recreating...")
-                                    # Use SIGTERM for graceful shutdown (allows cleanup)
-                                    subprocess.run(['kill', '-TERM', pid], check=False)
-                                    # Give it a moment to clean up and exit
-                                    import time
-                                    time.sleep(1.0)
+                                    # Wrong directory or couldn't determine - send quit command then recreate
+                                    logger.info(f"Lazygit running in wrong directory ({lazygit_cwd} != {cwd}), sending quit and recreating...")
+                                    # Send 'q' key to lazygit to quit gracefully (restores terminal state)
+                                    try:
+                                        process_check = subprocess.run(
+                                            ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                                            capture_output=True,
+                                            text=True,
+                                            timeout=1
+                                        )
+                                        processes = process_check.stdout.lower()
+                                        
+                                        if "iterm2" in processes or "iterm" in processes:
+                                            # Send 'q' to iTerm2 window with lazygit
+                                            applescript = f'''
+                                                tell application "iTerm"
+                                                    activate
+                                                    repeat with aWindow in windows
+                                                        repeat with aTab in tabs of aWindow
+                                                            tell current session of aTab
+                                                                if name contains "{git_ui_command}" then
+                                                                    write text "q"
+                                                                    return
+                                                                end if
+                                                            end tell
+                                                        end repeat
+                                                    end repeat
+                                                end tell
+                                            '''
+                                            subprocess.run(['osascript', '-e', applescript], check=False)
+                                        else:
+                                            # For Terminal.app, use System Events to send 'q'
+                                            applescript = '''
+                                                tell application "Terminal"
+                                                    activate
+                                                    tell application "System Events"
+                                                        keystroke "q"
+                                                    end tell
+                                                end tell
+                                            '''
+                                            subprocess.run(['osascript', '-e', applescript], check=False)
+                                        
+                                        # Give lazygit time to quit gracefully
+                                        import time
+                                        time.sleep(1.0)
+                                        
+                                        # Check if it's still running, kill if necessary
+                                        check_result = subprocess.run(
+                                            ['pgrep', '-x', git_ui_command],
+                                            capture_output=True,
+                                            text=True
+                                        )
+                                        if check_result.returncode == 0:
+                                            # Still running, force kill
+                                            subprocess.run(['kill', '-TERM', pid], check=False)
+                                            time.sleep(0.5)
+                                    except Exception as e:
+                                        logger.warning(f"Failed to send quit command: {e}, killing process")
+                                        subprocess.run(['kill', '-TERM', pid], check=False)
+                                        import time
+                                        time.sleep(1.0)
                                     # Fall through to create new window
                             except Exception as e:
                                 logger.warning(f"Failed to check lazygit directory: {e}, will create new window")
-                                # Kill the old one gracefully and create new
-                                subprocess.run(['kill', '-TERM', pid], check=False)
-                                import time
-                                time.sleep(1.0)
+                                # Try to send quit command, then kill if needed
+                                try:
+                                    # Send 'q' to quit gracefully
+                                    process_check = subprocess.run(
+                                        ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=1
+                                    )
+                                    processes = process_check.stdout.lower()
+                                    
+                                    if "iterm2" in processes or "iterm" in processes:
+                                        applescript = f'''
+                                            tell application "iTerm"
+                                                activate
+                                                repeat with aWindow in windows
+                                                    repeat with aTab in tabs of aWindow
+                                                        tell current session of aTab
+                                                            if name contains "{git_ui_command}" then
+                                                                write text "q"
+                                                                return
+                                                            end if
+                                                        end tell
+                                                    end repeat
+                                                end repeat
+                                            end tell
+                                        '''
+                                        subprocess.run(['osascript', '-e', applescript], check=False)
+                                    else:
+                                        applescript = '''
+                                            tell application "Terminal"
+                                                activate
+                                                tell application "System Events"
+                                                    keystroke "q"
+                                                end tell
+                                            end tell
+                                        '''
+                                        subprocess.run(['osascript', '-e', applescript], check=False)
+                                    
+                                    import time
+                                    time.sleep(1.0)
+                                    
+                                    # Check if still running
+                                    check_result = subprocess.run(
+                                        ['pgrep', '-x', git_ui_command],
+                                        capture_output=True,
+                                        text=True
+                                    )
+                                    if check_result.returncode == 0:
+                                        subprocess.run(['kill', '-TERM', pid], check=False)
+                                        time.sleep(0.5)
+                                except Exception:
+                                    # Fallback to direct kill
+                                    subprocess.run(['kill', '-TERM', pid], check=False)
+                                    import time
+                                    time.sleep(1.0)
 
                         # lazygit not running - create new window
                         # Check if iTerm2 is running
@@ -324,8 +430,12 @@ class ExternalToolLauncher:
                                 logger.info(f"Switched to existing {git_ui_command} window in {cwd}")
                                 return True
                             else:
-                                # Wrong directory - kill and recreate
-                                logger.info(f"Git window exists but in wrong directory ({current_path} != {cwd}), recreating...")
+                                # Wrong directory - send quit command then kill window
+                                logger.info(f"Git window exists but in wrong directory ({current_path} != {cwd}), sending quit and recreating...")
+                                # Send 'q' to lazygit to quit gracefully (restores terminal state)
+                                subprocess.run(['tmux', 'send-keys', '-t', ':git', 'q'], check=False)
+                                import time
+                                time.sleep(0.5)  # Give lazygit time to quit
                                 subprocess.run(['tmux', 'kill-window', '-t', ':git'], check=False)
                     else:
                         # Window exists but lazygit not running - kill it and create new
