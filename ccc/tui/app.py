@@ -1410,6 +1410,12 @@ class CommandCenterTUI(App):
             self.notify("Tool launcher not initialized", severity="error")
             return
 
+        # Get the selected ticket to determine the correct worktree directory
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
         try:
             import shutil
             # Check if lazygit is available first
@@ -1418,9 +1424,15 @@ class CommandCenterTUI(App):
                 self.notify(f"{git_ui_cmd} not found in PATH. Install it first.", severity="error")
                 return
 
-            success = self.tool_launcher.launch_git_ui()
+            # Get the worktree directory for this ticket
+            worktree_path = self.config.get_worktree_path(ticket.branch)
+            if not worktree_path.exists():
+                self.notify(f"Worktree not found: {worktree_path}", severity="error")
+                return
+
+            success = self.tool_launcher.launch_git_ui(str(worktree_path))
             if success:
-                self.notify("Launched Git UI in new window", severity="information")
+                self.notify(f"Launched Git UI in {ticket.branch} worktree", severity="information")
             else:
                 self.notify("Failed to launch Git UI. Check logs for details.", severity="warning")
         except Exception as e:

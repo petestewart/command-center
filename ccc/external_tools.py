@@ -96,11 +96,14 @@ class ExternalToolLauncher:
         logger.error(f"No suitable editor found to open {file_path}")
         return False
 
-    def launch_git_ui(self) -> bool:
+    def launch_git_ui(self, directory: Optional[str] = None) -> bool:
         """
         Launch Git UI (lazygit) in a new temporary tmux window.
 
         Creates a new tmux window each time. Window closes when lazygit exits.
+
+        Args:
+            directory: Optional directory to launch git UI in. If not provided, uses current directory.
 
         Returns:
             True if successful, False otherwise
@@ -118,8 +121,10 @@ class ExternalToolLauncher:
             return False
 
         try:
-            # Get current working directory to launch lazygit in the right place
-            cwd = os.getcwd()
+            # Get working directory to launch lazygit in
+            # Use provided directory or current working directory
+            cwd = directory if directory else os.getcwd()
+            logger.info(f"Launching Git UI in directory: {cwd}")
 
             # Get current session (assumes we're running in a tmux session)
             current_session = os.environ.get('TMUX')
