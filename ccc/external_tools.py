@@ -207,17 +207,18 @@ class ExternalToolLauncher:
                                 else:
                                     # Wrong directory or couldn't determine - kill and recreate
                                     logger.info(f"Lazygit running in wrong directory ({lazygit_cwd} != {cwd}), killing and recreating...")
-                                    subprocess.run(['kill', pid], check=False)
-                                    # Give it a moment to die
+                                    # Use SIGTERM for graceful shutdown (allows cleanup)
+                                    subprocess.run(['kill', '-TERM', pid], check=False)
+                                    # Give it a moment to clean up and exit
                                     import time
-                                    time.sleep(0.5)
+                                    time.sleep(1.0)
                                     # Fall through to create new window
                             except Exception as e:
                                 logger.warning(f"Failed to check lazygit directory: {e}, will create new window")
-                                # Kill the old one and create new
-                                subprocess.run(['kill', pid], check=False)
+                                # Kill the old one gracefully and create new
+                                subprocess.run(['kill', '-TERM', pid], check=False)
                                 import time
-                                time.sleep(0.5)
+                                time.sleep(1.0)
 
                         # lazygit not running - create new window
                         # Check if iTerm2 is running
