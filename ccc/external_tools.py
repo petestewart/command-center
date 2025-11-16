@@ -52,21 +52,31 @@ class ExternalToolLauncher:
 
         # Try configured IDE first (default: cursor)
         ide_command = getattr(self.config, 'ide_command', 'cursor')
-        ide_args = getattr(self.config, 'ide_args', [])
+        ide_args = getattr(self.config, 'ide_args', None)
+
+        # Ensure ide_args is a list
+        if ide_args is None:
+            ide_args = []
+
+        logger.info(f"Attempting to launch IDE: {ide_command} with file: {file_path}")
 
         if shutil.which(ide_command):
             try:
                 cmd = [ide_command] + ide_args + [file_path]
+                logger.info(f"Running command: {' '.join(cmd)}")
                 subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 logger.info(f"Launched {ide_command} with {file_path}")
                 return True
             except Exception as e:
                 logger.warning(f"Failed to launch {ide_command}: {e}")
+        else:
+            logger.warning(f"{ide_command} not found in PATH")
 
         # Fallback to $EDITOR environment variable
         editor = os.environ.get('EDITOR')
         if editor and shutil.which(editor):
             try:
+                logger.info(f"Falling back to $EDITOR: {editor}")
                 subprocess.Popen([editor, file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 logger.info(f"Launched $EDITOR ({editor}) with {file_path}")
                 return True
@@ -76,6 +86,7 @@ class ExternalToolLauncher:
         # Final fallback to vim (should be available on most systems)
         if shutil.which('vim'):
             try:
+                logger.info("Falling back to vim")
                 subprocess.Popen(['vim', file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 logger.info(f"Launched vim with {file_path}")
                 return True
@@ -110,13 +121,67 @@ class ExternalToolLauncher:
             # Get current session (assumes we're running in a tmux session)
             current_session = os.environ.get('TMUX')
             if not current_session:
-                # Not in tmux, launch in regular terminal
-                cmd = [git_ui_command] + git_ui_args
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                logger.info(f"Launched {git_ui_command} in regular terminal")
-                return True
+                # Not in tmux - open in a new terminal window (macOS/Linux)
+                cmd_parts = [git_ui_command] + git_ui_args
+                cmd_str = ' '.join(cmd_parts)
 
-            # Create new temporary tmux window for git UI
+                if sys.platform == 'darwin':
+                    # macOS: Open in new Terminal or iTerm2 window
+                    try:
+                        # Check if iTerm2 is running
+                        result = subprocess.run(
+                            ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                            capture_output=True,
+                            text=True,
+                            timeout=1
+                        )
+                        processes = result.stdout.lower()
+
+                        if "iterm2" in processes or "iterm" in processes:
+                            # Use iTerm2
+                            applescript = f'''
+                                tell application "iTerm"
+                                    create window with default profile
+                                    tell current session of current window
+                                        write text "{cmd_str}"
+                                    end tell
+                                end tell
+                            '''
+                            subprocess.Popen(["osascript", "-e", applescript])
+                            logger.info(f"Launched {git_ui_command} in new iTerm2 window")
+                        else:
+                            # Use Terminal.app
+                            applescript = f'''
+                                tell application "Terminal"
+                                    do script "{cmd_str}"
+                                    activate
+                                end tell
+                            '''
+                            subprocess.Popen(["osascript", "-e", applescript])
+                            logger.info(f"Launched {git_ui_command} in new Terminal window")
+                        return True
+                    except Exception as e:
+                        logger.error(f"Failed to launch in new terminal window: {e}")
+                        return False
+                else:
+                    # Linux: Try to open in new terminal window
+                    # Try common terminal emulators
+                    terminals = [
+                        ['gnome-terminal', '--', 'bash', '-c', cmd_str],
+                        ['konsole', '-e', cmd_str],
+                        ['xterm', '-e', cmd_str],
+                    ]
+
+                    for term_cmd in terminals:
+                        if shutil.which(term_cmd[0]):
+                            subprocess.Popen(term_cmd)
+                            logger.info(f"Launched {git_ui_command} in new {term_cmd[0]} window")
+                            return True
+
+                    logger.error("No suitable terminal emulator found")
+                    return False
+
+            # In tmux: Create new temporary tmux window for git UI
             # Using tmux directly for temporary window that closes on exit
             cmd_parts = [git_ui_command] + git_ui_args
             cmd_str = ' '.join(cmd_parts)

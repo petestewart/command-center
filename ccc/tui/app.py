@@ -440,8 +440,6 @@ class CommandCenterTUI(App):
         Binding("enter", "select", "Select", show=False),
         # Phase 3 Week 1: Git & Build
         Binding("c", "commit", "Commit"),
-        Binding("p", "push", "Push"),
-        Binding("P", "pull", "Pull"),
         Binding("l", "log", "Log"),
         Binding("b", "build", "Build"),
         # Phase 3 Week 2: Tests & Files
@@ -455,7 +453,7 @@ class CommandCenterTUI(App):
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
         # Phase 2: External Tool Launchers
-        Binding("o", "open_plan", "Plan"),
+        Binding("p", "open_plan", "Plan"),
         Binding("g", "open_git", "Git UI"),
         Binding("n", "open_notes", "Notes"),
         Binding("J", "open_jira", "Jira"),
@@ -1385,13 +1383,26 @@ class CommandCenterTUI(App):
             return
 
         try:
+            import shutil
+            # Check what IDE we're using
+            ide_cmd = getattr(self.config, 'ide_command', 'cursor')
+            has_cursor = shutil.which('cursor')
+            has_code = shutil.which('code')
+
+            if not has_cursor and not has_code:
+                import os
+                editor = os.environ.get('EDITOR', 'vim')
+                self.notify(f"Cursor/VS Code not found. Opening in {editor}...", severity="information", timeout=5)
+
             success = self.tool_launcher.open_plan_file()
             if success:
                 self.notify("Opened PLAN.md in IDE", severity="information")
             else:
-                self.notify("Failed to open PLAN.md. Check IDE configuration.", severity="warning")
+                self.notify("Failed to open PLAN.md. Check logs for details.", severity="warning")
         except Exception as e:
             self.notify(f"Error opening PLAN.md: {e}", severity="error")
+            import traceback
+            traceback.print_exc()
 
     def action_open_git(self) -> None:
         """Launch Git UI (lazygit) in temporary tmux window."""
