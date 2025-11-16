@@ -1,7 +1,7 @@
 """Tests for external_tools module."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, call
 from pathlib import Path
 
 from ccc.external_tools import ExternalToolLauncher
@@ -91,24 +91,48 @@ class TestLaunchGitUI:
     @patch('ccc.external_tools.subprocess.run')
     @patch.dict('os.environ', {'TMUX': 'tmux-session'})
     def test_launch_git_ui_in_tmux(self, mock_run, mock_which, launcher):
-        """Test launching Git UI in tmux creates new window."""
+        """Test launching Git UI in tmux creates new window when no existing window."""
         mock_which.return_value = '/usr/bin/lazygit'
+
+        # Mock no existing git window
+        def run_side_effect(*args, **kwargs):
+            cmd = args[0]
+            result = Mock()
+            result.returncode = 0
+            result.stdout = 'main\nother'  # No 'git' window
+            result.stderr = ''
+            return result
+
+        mock_run.side_effect = run_side_effect
 
         result = launcher.launch_git_ui()
 
         assert result is True
-        mock_run.assert_called_once()
         # Check that tmux new-window was called
-        call_args = mock_run.call_args[0][0]
-        assert 'tmux' in call_args
-        assert 'new-window' in call_args
+        new_window_calls = [call for call in mock_run.call_args_list if 'new-window' in str(call)]
+        assert len(new_window_calls) > 0
 
+    @patch('sys.platform', 'darwin')
     @patch('ccc.external_tools.shutil.which')
+    @patch('ccc.external_tools.subprocess.run')
     @patch('ccc.external_tools.subprocess.Popen')
     @patch.dict('os.environ', {}, clear=True)
-    def test_launch_git_ui_outside_tmux(self, mock_popen, mock_which, launcher):
+    def test_launch_git_ui_outside_tmux(self, mock_popen, mock_run, mock_which, launcher):
         """Test launching Git UI outside tmux opens in regular terminal."""
         mock_which.return_value = '/usr/bin/lazygit'
+
+        def run_side_effect(*args, **kwargs):
+            cmd = args[0]
+            result = Mock()
+            result.returncode = 1  # pgrep returns 1 when process not found
+            result.stdout = ''
+            result.stderr = ''
+            if 'osascript' in cmd or 'System Events' in str(args):
+                result.returncode = 0
+                result.stdout = 'iTerm2, Finder'
+            return result
+
+        mock_run.side_effect = run_side_effect
 
         result = launcher.launch_git_ui()
 
@@ -123,6 +147,113 @@ class TestLaunchGitUI:
         result = launcher.launch_git_ui()
 
         assert result is False
+
+    @patch('ccc.external_tools.shutil.which')
+    @patch('ccc.external_tools.subprocess.run')
+    @patch.dict('os.environ', {'TMUX': 'tmux-session'})
+    def test_launch_git_ui_reuses_existing_tmux_window(self, mock_run, mock_which, launcher):
+        """Test that existing tmux window with lazygit is reused instead of creating new."""
+        mock_which.return_value = '/usr/bin/lazygit'
+
+        # Mock responses for checking existing windows
+        def run_side_effect(*args, **kwargs):
+            cmd = args[0]
+            result = Mock()
+            result.returncode = 0
+            result.stdout = ''
+            result.stderr = ''
+
+            if 'list-windows' in cmd:
+                # Window named "git" exists
+                result.stdout = 'main\ngit\nother'
+            elif 'list-panes' in cmd:
+                # lazygit is running in the window
+                result.stdout = 'lazygit'
+            elif 'select-window' in cmd:
+                # Successfully selected window
+                pass
+            return result
+
+        mock_run.side_effect = run_side_effect
+
+        result = launcher.launch_git_ui()
+
+        assert result is True
+        # Verify select-window was called
+        select_calls = [call for call in mock_run.call_args_list if 'select-window' in str(call)]
+        assert len(select_calls) > 0
+
+    @patch('ccc.external_tools.shutil.which')
+    @patch('ccc.external_tools.subprocess.run')
+    @patch.dict('os.environ', {'TMUX': 'tmux-session'})
+    def test_launch_git_ui_recreates_stale_tmux_window(self, mock_run, mock_which, launcher):
+        """Test that tmux window exists but lazygit not running causes recreation."""
+        mock_which.return_value = '/usr/bin/lazygit'
+
+        call_count = {'count': 0}
+
+        def run_side_effect(*args, **kwargs):
+            cmd = args[0]
+            result = Mock()
+            result.returncode = 0
+            result.stdout = ''
+            result.stderr = ''
+
+            if 'list-windows' in cmd:
+                result.stdout = 'main\ngit\nother'
+            elif 'list-panes' in cmd:
+                # lazygit NOT running (different command)
+                result.stdout = 'bash'
+            elif 'kill-window' in cmd:
+                call_count['count'] += 1
+                pass
+            elif 'new-window' in cmd:
+                call_count['count'] += 1
+                pass
+            return result
+
+        mock_run.side_effect = run_side_effect
+
+        result = launcher.launch_git_ui()
+
+        assert result is True
+        # Verify both kill-window and new-window were called
+        assert call_count['count'] >= 2
+
+    @patch('sys.platform', 'darwin')
+    @patch('ccc.external_tools.shutil.which')
+    @patch('ccc.external_tools.subprocess.run')
+    @patch('ccc.external_tools.subprocess.Popen')
+    @patch.dict('os.environ', {}, clear=True)
+    def test_launch_git_ui_macos_reuses_existing_process(self, mock_popen, mock_run, mock_which, launcher):
+        """Test that macOS reuses existing lazygit process instead of creating new window."""
+        mock_which.return_value = '/usr/bin/lazygit'
+
+        def run_side_effect(*args, **kwargs):
+            cmd = args[0]
+            result = Mock()
+            result.stderr = ''
+
+            if 'pgrep' in cmd:
+                # lazygit is running
+                result.returncode = 0
+                result.stdout = '12345'
+            else:
+                # System Events call
+                result.returncode = 0
+                result.stdout = 'iTerm2, Finder'
+            return result
+
+        mock_run.side_effect = run_side_effect
+
+        result = launcher.launch_git_ui()
+
+        assert result is True
+        # Popen should NOT be called (no new window created)
+        mock_popen.assert_not_called()
+        # osascript activate should be called
+        activate_calls = [call for call in mock_run.call_args_list if 'activate' in str(call)]
+        assert len(activate_calls) > 0
 
 
 class TestOpenURL:

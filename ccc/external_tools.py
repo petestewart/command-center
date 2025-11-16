@@ -134,8 +134,39 @@ class ExternalToolLauncher:
                 cmd_str = ' '.join(cmd_parts)
 
                 if sys.platform == 'darwin':
-                    # macOS: Open in new Terminal or iTerm2 window
+                    # macOS: Check if lazygit is already running, if so focus it
                     try:
+                        # Check if lazygit process is running
+                        pgrep_result = subprocess.run(
+                            ['pgrep', '-x', git_ui_command],
+                            capture_output=True,
+                            text=True
+                        )
+
+                        if pgrep_result.returncode == 0:
+                            # lazygit is already running - just activate the terminal
+                            logger.info(f"{git_ui_command} already running, activating terminal window")
+
+                            # Check which terminal app to activate
+                            process_check = subprocess.run(
+                                ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                                capture_output=True,
+                                text=True,
+                                timeout=1
+                            )
+                            processes = process_check.stdout.lower()
+
+                            if "iterm2" in processes or "iterm" in processes:
+                                # Activate iTerm2
+                                subprocess.run(['osascript', '-e', 'tell application "iTerm" to activate'])
+                            else:
+                                # Activate Terminal.app
+                                subprocess.run(['osascript', '-e', 'tell application "Terminal" to activate'])
+
+                            logger.info(f"Activated terminal with existing {git_ui_command}")
+                            return True
+
+                        # lazygit not running - create new window
                         # Check if iTerm2 is running
                         result = subprocess.run(
                             ["osascript", "-e", 'tell application "System Events" to get name of processes'],
@@ -190,12 +221,45 @@ class ExternalToolLauncher:
                     logger.error("No suitable terminal emulator found")
                     return False
 
-            # In tmux: Create new temporary tmux window for git UI
-            # Using tmux directly for temporary window that closes on exit
+            # In tmux: Check for existing window first, then create or select
             cmd_parts = [git_ui_command] + git_ui_args
             cmd_str = ' '.join(cmd_parts)
 
-            # Create new window with git UI command in the current directory
+            # Check if a window named "git" already exists
+            try:
+                check_result = subprocess.run(
+                    ['tmux', 'list-windows', '-F', '#{window_name}'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                window_names = check_result.stdout.strip().split('\n')
+                git_window_exists = 'git' in window_names
+
+                if git_window_exists:
+                    # Window exists - check if lazygit is actually running in it
+                    pane_check = subprocess.run(
+                        ['tmux', 'list-panes', '-t', ':git', '-F', '#{pane_current_command}'],
+                        capture_output=True,
+                        text=True,
+                        check=False  # Don't fail if window doesn't have the pane
+                    )
+
+                    # If lazygit is running in the window, select it instead of creating new
+                    if pane_check.returncode == 0 and git_ui_command in pane_check.stdout:
+                        subprocess.run(['tmux', 'select-window', '-t', ':git'], check=True)
+                        logger.info(f"Switched to existing {git_ui_command} window")
+                        return True
+                    else:
+                        # Window exists but lazygit not running - kill it and create new
+                        logger.info("Git window exists but lazygit not running, recreating...")
+                        subprocess.run(['tmux', 'kill-window', '-t', ':git'], check=False)
+
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"Failed to check for existing window: {e.stderr}, creating new window")
+
+            # No existing window found (or it was killed) - create new one
             # The window will automatically close when the command exits
             result = subprocess.run([
                 'tmux', 'new-window',
