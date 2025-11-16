@@ -35,13 +35,29 @@ class Config:
     build_status_cache_seconds: int = 30
     test_status_cache_seconds: int = 30
 
+    # Phase 1: Server configuration
+    server_command: str = "npm run dev"  # Default server start command
+    server_auto_start: bool = False  # Never auto-start server (manual only)
+    server_health_check_interval: int = 10  # Health check interval in seconds
+    server_health_check_timeout: int = 2  # Health check timeout in seconds
+
+    # Custom regex patterns for server ready detection (optional)
+    # If not set, uses default patterns in LogPatternMatcher
+    server_ready_patterns: Optional[list[str]] = None
+    server_error_patterns: Optional[list[str]] = None
+
+    # Phase 1: Database configuration
+    database_type: str = "postgresql"  # Database type: postgresql, mysql, etc.
+    database_connection_string: Optional[str] = None  # e.g., "postgresql://localhost:5432/mydb"
+    database_health_check_interval: int = 30  # Health check interval in seconds
+
     # Phase 3: Build and test commands
     # Global default commands (used if no project-specific override)
     default_build_command: str = "npm run build"
     default_test_command: str = "npm test"
 
     # Per-project command overrides
-    # Format: {"project-name": {"build_command": "...", "test_command": "..."}}
+    # Format: {"project-name": {"build_command": "...", "test_command": "...", "server_command": "..."}}
     project_commands: Optional[Dict[str, Dict[str, str]]] = None
 
     # Diff viewer configuration
@@ -182,6 +198,27 @@ class Config:
 
         return self.default_test_command
 
+    def get_server_command(self, worktree_path: Path) -> str:
+        """
+        Get the server command for a specific project.
+
+        Checks for project-specific override, falls back to default.
+
+        Args:
+            worktree_path: Path to the worktree
+
+        Returns:
+            Server command to execute
+        """
+        project_name = self.get_project_name(worktree_path)
+
+        if project_name and self.project_commands:
+            project_config = self.project_commands.get(project_name, {})
+            if "server_command" in project_config:
+                return project_config["server_command"]
+
+        return self.server_command
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
         return asdict(self)
@@ -232,6 +269,27 @@ def load_config() -> Config:
             ),
             test_status_cache_seconds=data.get(
                 "test_status_cache_seconds", Config.test_status_cache_seconds
+            ),
+            server_command=data.get(
+                "server_command", Config.server_command
+            ),
+            server_auto_start=data.get(
+                "server_auto_start", Config.server_auto_start
+            ),
+            server_health_check_interval=data.get(
+                "server_health_check_interval", Config.server_health_check_interval
+            ),
+            server_health_check_timeout=data.get(
+                "server_health_check_timeout", Config.server_health_check_timeout
+            ),
+            server_ready_patterns=data.get("server_ready_patterns"),
+            server_error_patterns=data.get("server_error_patterns"),
+            database_type=data.get(
+                "database_type", Config.database_type
+            ),
+            database_connection_string=data.get("database_connection_string"),
+            database_health_check_interval=data.get(
+                "database_health_check_interval", Config.database_health_check_interval
             ),
             default_build_command=data.get(
                 "default_build_command", Config.default_build_command
