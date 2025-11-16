@@ -455,10 +455,10 @@ class CommandCenterTUI(App):
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
         # Phase 2: External Tool Launchers
-        Binding("shift+p", "open_plan", "Plan"),
+        Binding("o", "open_plan", "Plan"),
         Binding("g", "open_git", "Git UI"),
-        Binding("shift+n", "open_notes", "Notes"),
-        Binding("shift+j", "open_jira", "Jira"),
+        Binding("n", "open_notes", "Notes"),
+        Binding("J", "open_jira", "Jira"),
         Binding("d", "open_api_docs", "API Docs"),
     ]
 
@@ -1400,13 +1400,22 @@ class CommandCenterTUI(App):
             return
 
         try:
+            import shutil
+            # Check if lazygit is available first
+            git_ui_cmd = getattr(self.config, 'git_ui_command', 'lazygit')
+            if not shutil.which(git_ui_cmd):
+                self.notify(f"{git_ui_cmd} not found in PATH. Install it first.", severity="error")
+                return
+
             success = self.tool_launcher.launch_git_ui()
             if success:
-                self.notify("Launched Git UI", severity="information")
+                self.notify("Launched Git UI in new window", severity="information")
             else:
-                self.notify("Failed to launch Git UI. Check if lazygit is installed.", severity="warning")
+                self.notify("Failed to launch Git UI. Check logs for details.", severity="warning")
         except Exception as e:
             self.notify(f"Error launching Git UI: {e}", severity="error")
+            import traceback
+            traceback.print_exc()
 
     def action_open_notes(self) -> None:
         """Open NOTES.md in IDE."""

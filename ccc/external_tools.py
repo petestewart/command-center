@@ -95,7 +95,11 @@ class ExternalToolLauncher:
             True if successful, False otherwise
         """
         git_ui_command = getattr(self.config, 'git_ui_command', 'lazygit')
-        git_ui_args = getattr(self.config, 'git_ui_args', [])
+        git_ui_args = getattr(self.config, 'git_ui_args', None)
+
+        # Ensure git_ui_args is a list
+        if git_ui_args is None:
+            git_ui_args = []
 
         # Check if git UI command is available
         if not shutil.which(git_ui_command):
@@ -108,7 +112,7 @@ class ExternalToolLauncher:
             if not current_session:
                 # Not in tmux, launch in regular terminal
                 cmd = [git_ui_command] + git_ui_args
-                subprocess.Popen(cmd)
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 logger.info(f"Launched {git_ui_command} in regular terminal")
                 return True
 
@@ -119,15 +123,18 @@ class ExternalToolLauncher:
 
             # Create new window with git UI command
             # The window will automatically close when the command exits
-            subprocess.run([
+            result = subprocess.run([
                 'tmux', 'new-window',
                 '-n', 'git',  # Window name
                 cmd_str
-            ], check=True)
+            ], check=True, capture_output=True, text=True)
 
             logger.info(f"Launched {git_ui_command} in new tmux window")
             return True
 
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to launch Git UI (tmux error): {e.stderr}")
+            return False
         except Exception as e:
             logger.error(f"Failed to launch Git UI: {e}")
             return False
