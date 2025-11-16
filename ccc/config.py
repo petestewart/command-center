@@ -86,6 +86,28 @@ class Config:
     api_max_history_entries: int = 50
     api_verify_ssl: bool = True
 
+    # Phase 2: External Tool Launchers
+    # IDE configuration
+    ide_command: str = "cursor"  # Default IDE (cursor, code, vim, etc.)
+    ide_args: list[str] = None  # Additional arguments for IDE
+
+    # Git UI configuration
+    git_ui_command: str = "lazygit"  # Git UI tool (lazygit, tig, etc.)
+    git_ui_args: list[str] = None  # Additional arguments for git UI
+
+    # Database client configuration
+    db_client_command: str = "open"  # Command to open database client
+    db_client_args: list[str] = None  # Arguments for database client (e.g., ["-a", "TablePlus"])
+
+    # URL configuration
+    jira_base_url: str = ""  # Base URL for Jira (e.g., "https://company.atlassian.net")
+    api_docs_url: str = ""  # URL for API documentation
+
+    # File paths
+    plan_file: str = "PLAN.md"  # Path to plan file
+    notes_file: str = "NOTES.md"  # Path to notes file
+    tasks_file: str = "TASKS.md"  # Path to tasks file
+
     def get_worktree_path(self, branch_name: str) -> Path:
         """
         Get the worktree path for a specific branch.
@@ -342,6 +364,18 @@ def load_config() -> Config:
             api_verify_ssl=data.get(
                 "api_verify_ssl", Config.api_verify_ssl
             ),
+            # Phase 2: External Tool Launchers
+            ide_command=data.get("ide_command", Config.ide_command),
+            ide_args=data.get("ide_args"),
+            git_ui_command=data.get("git_ui_command", Config.git_ui_command),
+            git_ui_args=data.get("git_ui_args"),
+            db_client_command=data.get("db_client_command", Config.db_client_command),
+            db_client_args=data.get("db_client_args"),
+            jira_base_url=data.get("jira_base_url", Config.jira_base_url),
+            api_docs_url=data.get("api_docs_url", Config.api_docs_url),
+            plan_file=data.get("plan_file", Config.plan_file),
+            notes_file=data.get("notes_file", Config.notes_file),
+            tasks_file=data.get("tasks_file", Config.tasks_file),
         )
 
         return config

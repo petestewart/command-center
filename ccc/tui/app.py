@@ -22,8 +22,10 @@ from ccc.build_status import read_build_status
 from ccc.test_status import read_test_status
 from ccc.config import load_config
 from ccc.utils import format_time_ago
-from ccc.tui.widgets import StatusBar
+from ccc.tui.widgets import StatusBar, ButtonBar
 from ccc.status_monitor import StatusMonitor
+from ccc.external_tools import ExternalToolLauncher
+from ccc.session import TmuxSessionManager
 
 # Phase 3: Import new components
 from ccc.tui.dialogs import (
@@ -452,6 +454,12 @@ class CommandCenterTUI(App):
         Binding("v", "view_session", "View Session"),
         # Phase 7: API Testing
         Binding("a", "api_request", "API"),
+        # Phase 2: External Tool Launchers
+        Binding("shift+p", "open_plan", "Plan"),
+        Binding("g", "open_git", "Git UI"),
+        Binding("shift+n", "open_notes", "Notes"),
+        Binding("shift+j", "open_jira", "Jira"),
+        Binding("d", "open_api_docs", "API Docs"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -475,6 +483,9 @@ class CommandCenterTUI(App):
         # Phase 1: Status bar showing server, database, build, and test status
         yield StatusBar(id="status-bar")
 
+        # Phase 2: Button bar for external tool launchers
+        yield ButtonBar(id="button-bar")
+
         yield Footer()
 
     def on_mount(self) -> None:
@@ -494,6 +505,14 @@ class CommandCenterTUI(App):
         # Setup auto-refresh
         config = load_config()
         self.set_interval(config.status_poll_interval, self.auto_refresh)
+
+        # Phase 2: Initialize external tool launcher
+        try:
+            session_manager = TmuxSessionManager()
+            self.tool_launcher = ExternalToolLauncher(config, session_manager)
+        except Exception as e:
+            # If tmux is not available, create launcher without session manager
+            self.tool_launcher = ExternalToolLauncher(config, None)
 
     def load_tickets(self):
         """Load tickets from registry."""
@@ -1331,6 +1350,144 @@ class CommandCenterTUI(App):
 
         except Exception as e:
             self.notify(f"Error viewing session: {str(e)}", severity="error")
+
+    # Phase 2: External Tool Launcher Actions
+
+    def on_button_bar_button_clicked(self, event: ButtonBar.ButtonClicked) -> None:
+        """
+        Handle button clicks from the ButtonBar.
+
+        Args:
+            event: Button clicked event containing button_id
+        """
+        handlers = {
+            'btn_plan': self.action_open_plan,
+            'btn_git': self.action_open_git,
+            'btn_notes': self.action_open_notes,
+            'btn_api': self.action_open_api_docs,
+            'btn_jira': self.action_open_jira,
+            'btn_database': self.action_open_database,
+            'btn_server': self.action_focus_server,
+            'btn_build': self.action_build,
+            'btn_tests': self.action_test,
+            'btn_tasks': self.action_toggle_tasks_pane,
+            'btn_agents': self.action_toggle_agents_pane,
+        }
+
+        handler = handlers.get(event.button_id)
+        if handler:
+            handler()
+
+    def action_open_plan(self) -> None:
+        """Open PLAN.md in IDE."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        try:
+            success = self.tool_launcher.open_plan_file()
+            if success:
+                self.notify("Opened PLAN.md in IDE", severity="information")
+            else:
+                self.notify("Failed to open PLAN.md. Check IDE configuration.", severity="warning")
+        except Exception as e:
+            self.notify(f"Error opening PLAN.md: {e}", severity="error")
+
+    def action_open_git(self) -> None:
+        """Launch Git UI (lazygit) in temporary tmux window."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        try:
+            success = self.tool_launcher.launch_git_ui()
+            if success:
+                self.notify("Launched Git UI", severity="information")
+            else:
+                self.notify("Failed to launch Git UI. Check if lazygit is installed.", severity="warning")
+        except Exception as e:
+            self.notify(f"Error launching Git UI: {e}", severity="error")
+
+    def action_open_notes(self) -> None:
+        """Open NOTES.md in IDE."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        try:
+            success = self.tool_launcher.open_notes_file()
+            if success:
+                self.notify("Opened NOTES.md in IDE", severity="information")
+            else:
+                self.notify("Failed to open NOTES.md. Check IDE configuration.", severity="warning")
+        except Exception as e:
+            self.notify(f"Error opening NOTES.md: {e}", severity="error")
+
+    def action_open_api_docs(self) -> None:
+        """Open API documentation in browser."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        try:
+            success = self.tool_launcher.open_api_docs()
+            if success:
+                self.notify("Opened API docs in browser", severity="information")
+            else:
+                self.notify("API docs URL not configured. Set 'api_docs_url' in config.", severity="warning")
+        except Exception as e:
+            self.notify(f"Error opening API docs: {e}", severity="error")
+
+    def action_open_jira(self) -> None:
+        """Open Jira ticket in browser."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        ticket = self._get_selected_ticket()
+        if not ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        # Extract Jira ticket ID from display_id or title
+        jira_id = ticket.display_id
+        if not jira_id:
+            self.notify("No Jira ticket ID found for this ticket", severity="warning")
+            return
+
+        try:
+            success = self.tool_launcher.open_jira_ticket(jira_id)
+            if success:
+                self.notify(f"Opened {jira_id} in browser", severity="information")
+            else:
+                self.notify("Jira base URL not configured. Set 'jira_base_url' in config.", severity="warning")
+        except Exception as e:
+            self.notify(f"Error opening Jira ticket: {e}", severity="error")
+
+    def action_open_database(self) -> None:
+        """Open database client."""
+        if not hasattr(self, 'tool_launcher'):
+            self.notify("Tool launcher not initialized", severity="error")
+            return
+
+        try:
+            success = self.tool_launcher.launch_database_client()
+            if success:
+                self.notify("Launched database client", severity="information")
+            else:
+                self.notify("Failed to launch database client", severity="warning")
+        except Exception as e:
+            self.notify(f"Error launching database client: {e}", severity="error")
+
+    def action_toggle_tasks_pane(self) -> None:
+        """Toggle tasks pane visibility."""
+        # TODO: Implement pane toggling in Phase 5
+        self.notify("Pane toggling will be implemented in Phase 5", severity="information")
+
+    def action_toggle_agents_pane(self) -> None:
+        """Toggle agents pane visibility."""
+        # TODO: Implement pane toggling in Phase 5
+        self.notify("Pane toggling will be implemented in Phase 5", severity="information")
 
 
 def run_tui():
