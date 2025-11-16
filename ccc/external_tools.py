@@ -144,44 +144,80 @@ class ExternalToolLauncher:
                         )
 
                         if pgrep_result.returncode == 0:
-                            # lazygit is already running - find and activate its window
-                            logger.info(f"{git_ui_command} already running, finding and activating window")
+                            # lazygit is running - check if it's in the correct directory
+                            pid = pgrep_result.stdout.strip()
 
-                            # Check which terminal app to activate
-                            process_check = subprocess.run(
-                                ["osascript", "-e", 'tell application "System Events" to get name of processes'],
-                                capture_output=True,
-                                text=True,
-                                timeout=1
-                            )
-                            processes = process_check.stdout.lower()
+                            # Use lsof to get the current working directory of the lazygit process
+                            try:
+                                lsof_result = subprocess.run(
+                                    ['lsof', '-a', '-p', pid, '-d', 'cwd', '-Fn'],
+                                    capture_output=True,
+                                    text=True,
+                                    check=False
+                                )
 
-                            if "iterm2" in processes or "iterm" in processes:
-                                # Use AppleScript to find window with lazygit and bring it to front
-                                applescript = f'''
-                                    tell application "iTerm"
-                                        activate
-                                        -- Iterate through all windows to find one with lazygit
-                                        repeat with aWindow in windows
-                                            repeat with aTab in tabs of aWindow
-                                                tell current session of aTab
-                                                    if name contains "{git_ui_command}" then
-                                                        select aTab
-                                                        select aWindow
-                                                        return
-                                                    end if
-                                                end tell
-                                            end repeat
-                                        end repeat
-                                    end tell
-                                '''
-                                subprocess.run(['osascript', '-e', applescript], check=False)
-                            else:
-                                # For Terminal.app, just activate (harder to find specific window)
-                                subprocess.run(['osascript', '-e', 'tell application "Terminal" to activate'])
+                                # Parse lsof output to get cwd
+                                # Output format: "p<pid>\nn<path>"
+                                lazygit_cwd = None
+                                for line in lsof_result.stdout.split('\n'):
+                                    if line.startswith('n'):
+                                        lazygit_cwd = line[1:]  # Remove 'n' prefix
+                                        break
 
-                            logger.info(f"Activated terminal with existing {git_ui_command}")
-                            return True
+                                # Check if lazygit is in the correct directory
+                                if lazygit_cwd and lazygit_cwd == cwd:
+                                    # Correct directory - just activate the window
+                                    logger.info(f"{git_ui_command} already running in correct directory, activating window")
+
+                                    # Check which terminal app to activate
+                                    process_check = subprocess.run(
+                                        ["osascript", "-e", 'tell application "System Events" to get name of processes'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=1
+                                    )
+                                    processes = process_check.stdout.lower()
+
+                                    if "iterm2" in processes or "iterm" in processes:
+                                        # Use AppleScript to find window with lazygit and bring it to front
+                                        applescript = f'''
+                                            tell application "iTerm"
+                                                activate
+                                                -- Iterate through all windows to find one with lazygit
+                                                repeat with aWindow in windows
+                                                    repeat with aTab in tabs of aWindow
+                                                        tell current session of aTab
+                                                            if name contains "{git_ui_command}" then
+                                                                select aTab
+                                                                select aWindow
+                                                                return
+                                                            end if
+                                                        end tell
+                                                    end repeat
+                                                end repeat
+                                            end tell
+                                        '''
+                                        subprocess.run(['osascript', '-e', applescript], check=False)
+                                    else:
+                                        # For Terminal.app, just activate (harder to find specific window)
+                                        subprocess.run(['osascript', '-e', 'tell application "Terminal" to activate'])
+
+                                    logger.info(f"Activated terminal with existing {git_ui_command}")
+                                    return True
+                                else:
+                                    # Wrong directory or couldn't determine - kill and recreate
+                                    logger.info(f"Lazygit running in wrong directory ({lazygit_cwd} != {cwd}), killing and recreating...")
+                                    subprocess.run(['kill', pid], check=False)
+                                    # Give it a moment to die
+                                    import time
+                                    time.sleep(0.5)
+                                    # Fall through to create new window
+                            except Exception as e:
+                                logger.warning(f"Failed to check lazygit directory: {e}, will create new window")
+                                # Kill the old one and create new
+                                subprocess.run(['kill', pid], check=False)
+                                import time
+                                time.sleep(0.5)
 
                         # lazygit not running - create new window
                         # Check if iTerm2 is running
@@ -255,29 +291,41 @@ class ExternalToolLauncher:
                 git_window_exists = 'git' in window_names
 
                 if git_window_exists:
-                    # Window exists - check if lazygit is actually running in it
+                    # Window exists - check if lazygit is running AND in correct directory
                     pane_check = subprocess.run(
-                        ['tmux', 'list-panes', '-t', ':git', '-F', '#{pane_current_command}'],
+                        ['tmux', 'list-panes', '-t', ':git', '-F', '#{pane_current_command}:#{pane_current_path}'],
                         capture_output=True,
                         text=True,
                         check=False  # Don't fail if window doesn't have the pane
                     )
 
-                    # If lazygit is running in the window, select it instead of creating new
+                    # Parse the output: "command:/path/to/dir"
                     if pane_check.returncode == 0 and git_ui_command in pane_check.stdout:
-                        # Use the window name to select it
-                        select_result = subprocess.run(
-                            ['tmux', 'select-window', '-t', 'git'],
-                            capture_output=True,
-                            text=True,
-                            check=False
-                        )
-                        if select_result.returncode != 0:
-                            logger.warning(f"Failed to select window: {select_result.stderr}")
-                            # Try with colon prefix as fallback
-                            subprocess.run(['tmux', 'select-window', '-t', ':git'], check=True)
-                        logger.info(f"Switched to existing {git_ui_command} window")
-                        return True
+                        output = pane_check.stdout.strip()
+                        # Extract current path from output
+                        if ':' in output:
+                            parts = output.split(':', 1)
+                            current_path = parts[1] if len(parts) > 1 else ''
+
+                            # Check if lazygit is in the correct directory
+                            if current_path == cwd:
+                                # Correct directory - just switch to the window
+                                select_result = subprocess.run(
+                                    ['tmux', 'select-window', '-t', 'git'],
+                                    capture_output=True,
+                                    text=True,
+                                    check=False
+                                )
+                                if select_result.returncode != 0:
+                                    logger.warning(f"Failed to select window: {select_result.stderr}")
+                                    # Try with colon prefix as fallback
+                                    subprocess.run(['tmux', 'select-window', '-t', ':git'], check=True)
+                                logger.info(f"Switched to existing {git_ui_command} window in {cwd}")
+                                return True
+                            else:
+                                # Wrong directory - kill and recreate
+                                logger.info(f"Git window exists but in wrong directory ({current_path} != {cwd}), recreating...")
+                                subprocess.run(['tmux', 'kill-window', '-t', ':git'], check=False)
                     else:
                         # Window exists but lazygit not running - kill it and create new
                         logger.info("Git window exists but lazygit not running, recreating...")
